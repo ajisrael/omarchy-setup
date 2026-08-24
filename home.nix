@@ -82,6 +82,17 @@
       force = true; # composed: omarchy default + personal section
     };
     ".config/git/ignore".source = link "git/ignore";
+    # hyprland personal override stubs (Phase 5): input.lua (touchpad feel),
+    # monitors.lua (eDP-1 scale 1.6). Plain files - omarchy owns everything
+    # else under ~/.config/hypr/; these two replace its seeded stubs.
+    ".config/hypr/input.lua" = {
+      source = link "hypr/input.lua";
+      force = true;
+    };
+    ".config/hypr/monitors.lua" = {
+      source = link "hypr/monitors.lua";
+      force = true;
+    };
     # opencode: force-clobbers the stock omarchy seeds with the real configs
     # (MCP servers, permissions, theme, vim plugin). Restart opencode after a
     # switch to pick up changes. node_modules/ next to these are runtime state.

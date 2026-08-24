@@ -23,6 +23,9 @@ setup; do not evolve it. The migration story that led here is in
 | `config/modprobe.d/` | SPI SIEN(1) reroute, dw_dmac blacklist, kbd/screen backlight floors -> `/etc/modprobe.d/`. |
 | `config/udev/rules.d/` | `60-spi-pio.rules` (SPI runtime-PM pin), `90-power-profile.rules` (AC/battery profile switch, pending Phase 6 testing). |
 | `config/actkbd/` | F5/F6 backlight stepping: conf, systemd unit, helper script. |
+| `config/libinput/local-overrides.quirks` | Tags the SPI keyboard as internal so touchpad disable-while-typing fires -> `/etc/libinput/local-overrides.quirks`. |
+| `config/hypr/input.lua` | Personal input stub: natural scroll, tap-to-click off. HM-linked to `~/.config/hypr/input.lua`; everything else under hypr/ stays Omarchy's. |
+| `config/hypr/monitors.lua` | eDP-1 scale 1.6 (GDK_SCALE 2). HM-linked to `~/.config/hypr/monitors.lua`. |
 | `config/tmux/tmux.conf` | Composed tmux config = Omarchy default + personal section. |
 | `config/tmux/tmux-scripts/` | Sessionizer family (f sessionizer, todos, treehouse pool). |
 | `config/bash/bashrc-personal` | Shell fragments sourced by `~/.bashrc`. |
@@ -120,5 +123,9 @@ Tracked against docs/omarchy-migration-plan.md:
       `omarchy install <name>` when needed - deliberately NOT pre-ported.
       NOTE: opencode + node already present via mise - do NOT double-install
       pacman nodejs/npm; keep mise as their owner.
-- [ ] Phase 5: Hyprland ports (touchpad scroll_factor, keybinding deltas)
+- [x] Phase 5: Hyprland ports done - input.lua (natural scroll on,
+      tap-to-click off) + monitors.lua (scale 1.6) tracked and HM-linked;
+      Super+C/V universal copy-paste is stock Omarchy (no port needed);
+      sensitivity/scroll_factor kept at Omarchy defaults. Validated with
+      hyprctl reload + configerrors.
 - [ ] Phase 6: test AC/battery profile switching; retire arch-setup to archive
