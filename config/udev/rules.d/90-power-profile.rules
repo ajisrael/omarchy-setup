@@ -1,0 +1,8 @@
+# Re-apply the power profile when the AC adapter is plugged/unplugged.
+#
+# The switcher (build/power-profile.sh) reads the current Mains state itself,
+# so this rule just needs to fire on every Mains power_supply change event.
+# It runs as the desktop user (runuser) so per-state overrides in
+# ~/.local/state/power-profile are shared with the hyprland-autostarted run.
+# Deployed to /etc/udev/rules.d/ by build/system-config.sh.
+SUBSYSTEM=="power_supply", ATTR{type}=="Mains", ACTION=="change", RUN+="/usr/bin/runuser -u ajisrael -- /home/ajisrael/arch-setup/build/power-profile.sh"

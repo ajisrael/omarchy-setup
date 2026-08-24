@@ -1,0 +1,12 @@
+{
+  "$schema": "https://opencode.ai/tui.json",
+  "theme": "tokyonight",
+  "plugin": [
+    [
+      "@leohenon/opencode-vim-plugin",
+      {
+        "vim_enter_submit": true
+      }
+    ]
+  ]
+}

@@ -1,0 +1,27 @@
+# Omarchy environment (OMARCHY_PATH + PATH), needed even for non-interactive shells
+[[ -r /usr/share/omarchy/default/bash/env-bootstrap ]] && source /usr/share/omarchy/default/bash/env-bootstrap
+
+# Nix profile on PATH (home-manager generation self-hosts its CLI there).
+# /etc/profile.d/nix-daemon.sh only runs in login shells; omarchy terminals
+# start non-login shells, so wire it here instead. Guarded against the
+# double-add a login+interactive shell would otherwise produce.
+case ":$PATH:" in
+    *":$HOME/.nix-profile/bin:"*) ;;
+    *) [[ -d "$HOME/.nix-profile/bin" ]] && export PATH="$HOME/.nix-profile/bin:$PATH" ;;
+esac
+
+# If not running interactively, don't do anything else (leave this above the rc source)
+[[ $- != *i* ]] && return
+
+# All the default Omarchy aliases and functions
+# (don't mess with these directly, just overwrite them here!)
+source "$OMARCHY_PATH/default/bash/rc"
+
+# tmux sessionizer scripts (home-manager's home.sessionPath also wires this;
+# duplicated here so the PATH works before the first HM switch too)
+export PATH="$HOME/omarchy-setup/config/tmux/tmux-scripts:$PATH"
+
+# Personal fragments (EDITOR, aliases, opencode wrapper, C-f sessionizer, direnv hook)
+if [[ -r "$HOME/omarchy-setup/config/bash/bashrc-personal" ]]; then
+    source "$HOME/omarchy-setup/config/bash/bashrc-personal"
+fi

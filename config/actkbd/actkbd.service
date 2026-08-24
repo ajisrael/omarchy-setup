@@ -1,0 +1,24 @@
+# Keyboard shortcut daemon for the SMC keyboard backlight (archeus).
+#
+# Replaces the unit shipped by the actkbd AUR package: this one points at
+# udev's own by-path symlink for the applespi keyboard
+# (/dev/input/by-path/pci-0000:00:15.4-cs-00-event-kbd, created by
+# /usr/lib/udev/rules.d/60-persistent-input.rules at every boot) instead of a
+# boot-order dependent /dev/input/eventN.
+#
+# actkbd opens its device with fopen("a+"), which CREATES a regular file if
+# the path is missing yet. ExecStartPre therefore waits for the node, so the
+# daemon can never start before the keyboard device exists.
+[Unit]
+Description=actkbd keyboard shortcut daemon
+
+[Service]
+Type=simple
+TimeoutStartSec=30
+ExecStartPre=/bin/sh -c 'until [ -e /dev/input/by-path/pci-0000:00:15.4-cs-00-event-kbd ]; do sleep 0.2; done'
+ExecStart=/usr/bin/actkbd -q -d /dev/input/by-path/pci-0000:00:15.4-cs-00-event-kbd -c /etc/actkbd.conf
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

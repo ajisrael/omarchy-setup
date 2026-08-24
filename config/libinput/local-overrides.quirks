@@ -1,0 +1,17 @@
+# libinput local overrides (deployed to /etc/libinput/local-overrides.quirks)
+#
+# The applespi driver reports the internal keyboard with vendor=0000, so
+# libinput's stock "[Apple Internal Keyboard (SPI)]" quirk (MatchVendor=0x05AC)
+# never matches and the keyboard is treated as external. Disable-while-typing
+# only triggers from *internal* keyboards, so Hyprland's
+# input:touchpad:disable_while_typing=true was silently inert.
+# Tag it internal here; the touchpad already matches stock quirks via its
+# Synaptics vendor (0x06CB) and gets palm-detection attrs from those.
+#
+# Takes effect on next Hyprland session (quirks are read at device add).
+
+[Apple SPI Keyboard]
+MatchName=Apple SPI Keyboard
+MatchUdevType=keyboard
+MatchBus=spi
+AttrKeyboardIntegration=internal

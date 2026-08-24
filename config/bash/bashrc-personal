@@ -1,0 +1,30 @@
+# Personal shell fragments, composed onto Omarchy's bash defaults.
+# Sourced by ~/.bashrc after "$OMARCHY_PATH/default/bash/rc".
+
+export EDITOR='nvim'
+
+alias vim="nvim"
+
+# opencode: load MCP server secrets (repo-root .env, decrypted by
+# build/decrypt-secrets.sh) into the session env, then launch. `command`
+# bypasses this function so the mise-managed binary resolves via PATH;
+# the source is guarded because .env won't exist on a fresh clone.
+opencode() {
+    if [[ -f "$HOME/omarchy-setup/.env" ]]; then
+        set -a
+        source "$HOME/omarchy-setup/.env"
+        set +a
+    fi
+    command opencode "$@"
+}
+
+# tmux-sessionizer on Ctrl-F. stdin/stdout pinned to /dev/tty so fzf renders
+# correctly under readline's bind -x stdio hijack.
+bind -x '"\C-f": tmux-sessionizer </dev/tty >/dev/tty'
+
+# direnv hook - home-manager's programs.direnv can't inject into a repo-owned
+# .bashrc, so it lives here instead. Guarded: direnv only exists after the
+# first HM switch installs it.
+if command -v direnv >/dev/null; then
+    eval "$(direnv hook bash)"
+fi

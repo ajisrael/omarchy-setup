@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Step the MacBook keyboard backlight (smc::kbd_backlight, SMC key LKSB) up or
+# down. Called by actkbd on F5/F6: a key press steps 10% (default), while the
+# held-key repeat steps 1% so holding ramps smoothly (the kernel autorepeat is
+# ~30Hz, so a 10% repeat would slam to max in under a second).
+#
+# applesmc only implements brightness_set, no brightness_get, so the sysfs
+# 'brightness' file reports the last value written through the LED core - it
+# starts at 0 at boot regardless of the hardware state. After boot the first
+# F6 press therefore sets ~10% (not the hardware level); keep pressing to
+# adjust.
+set -euo pipefail
+
+dir=/sys/class/leds/smc::kbd_backlight
+max=$(cat "$dir/max_brightness")
+cur=$(cat "$dir/brightness")
+step_pct=${2:-10}
+step_pct=${step_pct//%/}
+step=$((max * step_pct / 100))
+(( step < 1 )) && step=1
+
+case "${1:-}" in
+  up)   next=$((cur + step)) ; (( next > max )) && next=$max ;;
+  down) next=$((cur - step)) ; (( next < 0 )) && next=0 ;;
+  *) echo "usage: $0 up|down [step-percent]" >&2; exit 2 ;;
+esac
+
+echo "$next" > "$dir/brightness"
