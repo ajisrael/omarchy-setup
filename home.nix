@@ -93,6 +93,18 @@
       source = link "hypr/monitors.lua";
       force = true;
     };
+    # Personal keybindings (SUPER+CTRL+ALT+S lid-sleep toggle). Same pattern
+    # as input.lua/monitors.lua: replaces omarchy's seeded stub (kept as
+    # bindings.lua.pre-repo on first link).
+    ".config/hypr/bindings.lua" = {
+      source = link "hypr/bindings.lua";
+      force = true;
+    };
+    # Lid sleep override: toggle script + the user unit it starts/stops
+    # (systemd-inhibit handle-lid-switch). Needs the logind drop-in from
+    # build/omarchy-setup.sh to have any effect.
+    ".local/bin/lid-sleep".source = link "bin/lid-sleep";
+    ".config/systemd/user/lid-awake.service".source = link "systemd/user/lid-awake.service";
     # opencode: force-clobbers the stock omarchy seeds with the real configs
     # (MCP servers, permissions, theme, vim plugin). Restart opencode after a
     # switch to pick up changes. node_modules/ next to these are runtime state.

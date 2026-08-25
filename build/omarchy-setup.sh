@@ -72,6 +72,18 @@ sudo install -Dm644 "$rule_src" /etc/udev/rules.d/60-spi-pio.rules
 sudo udevadm control --reload
 sudo udevadm trigger --subsystem-match=pci
 
+echo "==> logind lid-toggle drop-in"
+LOGIND_SRC="$DIR/config/logind/30-lid-toggle.conf"
+[ -e "$LOGIND_SRC" ] || { echo "missing $LOGIND_SRC" >&2; exit 1; }
+if cmp -s "$LOGIND_SRC" /etc/systemd/logind.conf.d/30-lid-toggle.conf; then
+    echo "    already present"
+else
+    sudo install -Dm644 "$LOGIND_SRC" /etc/systemd/logind.conf.d/30-lid-toggle.conf
+    # Restart is safe on modern systemd: user sessions are not killed
+    # (KillUserProcesses defaults to no).
+    sudo systemctl restart systemd-logind
+fi
+
 echo "==> libinput quirks"
 quirk_src="$LIBINPUT_SRC/local-overrides.quirks"
 [ -e "$quirk_src" ] || { echo "missing $quirk_src" >&2; exit 1; }

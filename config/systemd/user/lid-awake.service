@@ -1,0 +1,9 @@
+[Unit]
+Description=Lid-close suspend inhibitor (agents keep working with lid closed)
+# Started/stopped by ~/.local/bin/lid-sleep while the state flag exists.
+# No [Install] on purpose: never enabled statically, so a reboot always
+# returns to the safe default (closing the lid suspends).
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/systemd-inhibit --what=handle-lid-switch sleep infinity

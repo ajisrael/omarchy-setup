@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Toggle suspend-on-lid-close for the "agents keep working with the lid shut"
+# workflow. Bound to SUPER+CTRL+ALT+S (config/hypr/bindings.lua).
+#
+# ON:  starts lid-awake.service, a user unit holding a systemd-inhibit
+#      handle-lid-switch lock; logind's LidSwitchIgnoreInhibited=no drop-in
+#      (build/omarchy-setup.sh) makes logind honor it and skip the suspend.
+# OFF: stops the unit again - lid close suspends normally.
+#
+# State flag: ~/.local/state/omarchy/toggles/lid-awake (watched by the
+# LidAwake indicator in ajisrael.indicators). Deliberately not persisted
+# across reboots: default is always "lid close suspends".
+set -euo pipefail
+
+STATE_DIR="$HOME/.local/state/omarchy/toggles"
+FLAG="$STATE_DIR/lid-awake"
+UNIT="lid-awake.service"
+
+mkdir -p "$STATE_DIR"
+
+if [[ -f $FLAG ]]; then
+    rm -f "$FLAG"
+    systemctl --user stop "$UNIT" 2>/dev/null || true
+    omarchy-notification-send -g 󰤂 "Lid sleep restored" \
+        "Closing the lid suspends normally." >/dev/null
+else
+    touch "$FLAG"
+    systemctl --user start "$UNIT"
+    omarchy-notification-send -g 󱐋 "Lid sleep disabled" \
+        "Closing the lid won't suspend - agents keep running." >/dev/null
+fi
