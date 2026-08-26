@@ -81,6 +81,15 @@
       source = link "tmux/tmux.conf";
       force = true; # composed: omarchy default + personal section
     };
+    # Phase 4.4: nvim is the vendored kickstart fork (config/nvim), linked as a
+    # whole directory so live edits apply instantly. force clobbers the
+    # omarchy-nvim-seeded ~/.config/nvim - move it aside before the first
+    # switch (mv ~/.config/nvim{,.omarchy-seed.bak}). Inside the tree,
+    # lua/config/omarchy-theme.lua keeps `omarchy theme set` working.
+    ".config/nvim" = {
+      source = link "nvim";
+      force = true;
+    };
     ".config/git/ignore".source = link "git/ignore";
     # hyprland personal override stubs (Phase 5): input.lua (touchpad feel),
     # monitors.lua (eDP-1 scale 1.6). Plain files - omarchy owns everything
