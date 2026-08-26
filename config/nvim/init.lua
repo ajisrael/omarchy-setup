@@ -742,7 +742,7 @@ do
   ---@type table<string, vim.lsp.Config>
   local servers = {
     clangd = {},
-    gopls = {},
+    -- gopls = {}, -- omarchy-setup: mason install kept failing; re-enable when Go work starts (:MasonInstall gopls)
     pyright = {},
     html = {},
     -- rust_analyzer = {},
