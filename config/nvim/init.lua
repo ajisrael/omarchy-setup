@@ -84,6 +84,19 @@ I hope you enjoy your Neovim journey,
 P.S. You can delete this when you're done too. It's your config now! :)
 --]]
 
+-- =====================================================================
+-- omarchy-setup note
+-- =====================================================================
+-- This is ajisrael/kickstart.nvim vendored into the omarchy-setup repo
+-- (Phase 4.4) and linked to ~/.config/nvim by home-manager. Divergences
+-- from upstream are tagged "omarchy-setup:" inline:
+--   * clipboard -> lua/config/remote_clipboard.lua (OSC 52 / wl-copy hybrid,
+--     ported from omarchy-nvim)
+--   * colorscheme -> lua/config/omarchy-theme.lua (omarchy theme pipeline;
+--     `omarchy theme set` keeps working)
+--   * stylua moved out of the LSP servers table into conform formatters_by_ft
+-- =====================================================================
+
 -- ============================================================
 -- SECTION 1: OPTIONS
 -- Core Neovim settings, leaders, options, basic keymaps, basic autocmds
@@ -411,29 +424,13 @@ do
   require('nvim-autopairs').setup {}
 
   -- [[ Colorscheme ]]
-  -- You can easily change to a different colorscheme.
-  -- Change the name of the colorscheme plugin below, and then
-  -- change the command under that to load whatever the name of that colorscheme is.
-  --
-  -- If you want to see what colorschemes are already installed, you can use `:Telescope colorscheme`.
-  vim.pack.add { gh 'folke/tokyonight.nvim' }
-  ---@diagnostic disable-next-line: missing-fields
-  require('tokyonight').setup {
-    transparent = true,
-    styles = {
-      comments = { italic = false }, -- Disable italics in comments
-      sidebars = 'transparent',
-      floats = 'transparent',
-    },
-  }
-
-  -- Load the colorscheme here.
-  -- Like many other themes, this one has different styles, and you could load
-  -- any other, such as 'tokyonight-storm', 'tokyonight-moon', or 'tokyonight-day'.
-  vim.cmd.colorscheme 'tokyonight-night'
-
-  -- Lighten relative line numbers; default LineNr (#3b4261) is too dim to read.
-  vim.api.nvim_set_hl(0, 'LineNr', { fg = '#565f89' })
+  -- omarchy-setup: theming flows through `omarchy theme set`, which
+  -- regenerates a spec file this module executes (installs the theme plugin,
+  -- applies its opts, sets the colorscheme, reapplies transparency). Falls
+  -- back to the original kickstart choice below when no state file exists.
+  -- Re-applies automatically in running instances after a desktop theme
+  -- switch; :OmarchyThemeReload forces it.
+  require('config.omarchy-theme').setup()
 
   -- Highlight todo, notes, etc in comments
   vim.pack.add { gh 'folke/todo-comments.nvim' }
