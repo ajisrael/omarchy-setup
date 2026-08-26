@@ -127,6 +127,11 @@ do
   --  See `:help 'clipboard'`
   vim.schedule(function() vim.o.clipboard = 'unnamedplus' end)
 
+  -- omarchy-setup: OSC 52 / wl-copy hybrid provider, active inside tmux, SSH
+  -- or herdr sessions so yanks reach every attached client (and paste prefers
+  -- the local Wayland clipboard when one exists).
+  require('config.remote_clipboard').setup()
+
   -- Enable break indent
   vim.o.breakindent = true
 
