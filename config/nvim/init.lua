@@ -753,7 +753,9 @@ do
     -- But for many setups, the LSP (`ts_ls`) will work just fine
     ts_ls = {},
 
-    stylua = {}, -- Used to format Lua code
+    -- omarchy-setup: stylua was here as a "server"; it is a formatter, not an
+    -- LSP server, so it lives in conform's formatters_by_ft below and is
+    -- installed via mason's ensure_installed list.
 
     -- Special Lua Config, as recommended by neovim help docs
     lua_ls = {
@@ -809,6 +811,8 @@ do
   -- You can press `g?` for help in this menu.
   local ensure_installed = vim.tbl_keys(servers or {})
   vim.list_extend(ensure_installed, {
+    -- omarchy-setup: stylua formats Lua via conform (see SECTION 8)
+    'stylua',
     -- You can add other tools here that you want Mason to install
   })
 
@@ -846,6 +850,7 @@ do
     },
     -- You can also specify external formatters in here.
     formatters_by_ft = {
+      lua = { 'stylua' }, -- omarchy-setup: moved here from the LSP servers table
       -- rust = { 'rustfmt' },
       -- Conform can also run multiple formatters sequentially
       -- python = { "isort", "black" },
