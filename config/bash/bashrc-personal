@@ -18,9 +18,8 @@ opencode() {
     command opencode "$@"
 }
 
-# tmux-sessionizer on Ctrl-F. stdin/stdout pinned to /dev/tty so fzf renders
-# correctly under readline's bind -x stdio hijack.
-bind -x '"\C-f": tmux-sessionizer </dev/tty >/dev/tty'
+# tmux-sessionizer on Ctrl-F.
+bind -x '"\C-f": tmux-sessionizer'
 
 # direnv hook - home-manager's programs.direnv can't inject into a repo-owned
 # .bashrc, so it lives here instead. Guarded: direnv only exists after the
