@@ -69,9 +69,11 @@ HM stays user-scope only and must not expand into desktop-config territory:
   `.ssh/config`, `.config/git/ignore`, `.config/tmux/tmux.conf`,
   opencode JSONs, `home.sessionPath` (tmux-scripts), and packages not in
   Arch repos (treehouse, uv).
-- Package placement rule: available in the Arch/AUR repos -> `omarchy pkg
-  add` (system layer, e.g. ansible-core). NOT packaged there or needing
-  user-scope pinning -> `home.packages` (nix layer). Never both.
+- Package placement rule: available in the Arch repos -> `omarchy pkg add`
+  (system layer, e.g. ansible-core). AUR-only -> `yay` directly (system layer,
+  e.g. blesh-git) - `omarchy pkg add` is just `pacman -S`, it cannot reach AUR.
+  NOT packaged anywhere or needing user-scope pinning -> `home.packages`
+  (nix layer). Never both.
 - HM deliberately does NOT own: `~/.config/git/config` (hand-maintained on
   this box - don't add programs.git), `.config/nvim` (Phase 4.4 will link
   the kickstart fork; omarchy-nvim seed stays until then), any hyprland/
