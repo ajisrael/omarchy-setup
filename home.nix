@@ -109,6 +109,10 @@
       source = link "hypr/bindings.lua";
       force = true;
     };
+    # ble.sh line editor config (autosuggestions + syntax highlighting).
+    # init.sh is ble.sh's stock config path (~/.config/blesh/init.sh), loaded by
+    # ble.sh itself at attach; wired from the tail of config/bash/bashrc-personal.
+    ".config/blesh/init.sh".source = link "blesh/init.sh";
     # Lid sleep override: toggle script + the user unit it starts/stops
     # (systemd-inhibit handle-lid-switch). Needs the logind drop-in from
     # build/omarchy-setup.sh to have any effect.

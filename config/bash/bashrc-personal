@@ -27,3 +27,11 @@ bind -x '"\C-f": tmux-sessionizer'
 if command -v direnv >/dev/null; then
     eval "$(direnv hook bash)"
 fi
+
+# ble.sh: inline autosuggestions + syntax highlighting (config in
+# ~/.config/blesh/init.sh). Must load LAST - it takes over the line editor -
+# after omarchy's rc, the inputrc binds, and everything above. Non-interactive
+# shells are unaffected.
+if [[ $- == *i* ]] && [[ -r /usr/share/blesh/ble.sh ]]; then
+    source /usr/share/blesh/ble.sh
+fi
