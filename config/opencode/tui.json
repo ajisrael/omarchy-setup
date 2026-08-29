@@ -5,7 +5,9 @@
     [
       "@leohenon/opencode-vim-plugin",
       {
-        "vim_enter_submit": true
+        "vim_enter_submit": true,
+        "vim_initial_mode": "insert",
+        "vim_insert_after_submit": true
       }
     ]
   ]
