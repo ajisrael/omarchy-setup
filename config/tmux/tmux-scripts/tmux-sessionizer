@@ -4,7 +4,7 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$script_dir/tmux-sessionizer-lib.sh"
 
 # search for project directory
-selected=$(find ~ -mindepth 1 -maxdepth 1 -type d | fzf)
+selected=$(find ~ ~/learning/ -mindepth 1 -maxdepth 1 -type d | fzf)
 
 # if we did not select a directory then exit
 if [[ -z $selected ]]; then
