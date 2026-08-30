@@ -1,0 +1,10 @@
+{
+  "providers": {
+    "opencode": {
+      "headers": {
+        "User-Agent": "opencode/1.18.16",
+        "x-opencode-client": "cli"
+      }
+    }
+  }
+}

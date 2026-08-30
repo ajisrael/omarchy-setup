@@ -51,7 +51,8 @@
   # treehouse comes from its own flake input (not nixpkgs) - consumed by
   # tmux-sessionizer-treehouse for the worktree pool (see config/tmux/).
   # btop is omarchy's; uv is not in the Arch repos.
-  # (pi coding agent was dropped - not part of the workflow yet.)
+  # (the pi coding agent binary is mise-managed, outside both layers; its
+  # config is linked below.)
   home.packages = [ pkgs.uv treehousePackage ];
 
   # direnv: environment switcher. The bash hook is NOT auto-injected (HM does
@@ -134,6 +135,15 @@
     };
     ".config/opencode/tui.json" = {
       source = link "opencode/tui.json";
+      force = true;
+    };
+    # pi coding agent: Zen's free-model gateway 429s every request that does
+    # not carry the official-client header fingerprint (FreeUsageLimitError),
+    # so the provider override injects them. Only this file is linked -
+    # auth.json, models-store.json, settings.json and sessions/ stay
+    # unmanaged runtime state next to it.
+    ".pi/agent/models.json" = {
+      source = link "pi/models.json";
       force = true;
     };
   };
