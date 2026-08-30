@@ -115,7 +115,7 @@ fi
 echo "==> patched kernel"
 if compgen -G "$KERNEL_BUILD_DIR/linux-*.pkg.tar.zst" >/dev/null; then
     pkgfile=$(ls "$KERNEL_BUILD_DIR"/linux-*.pkg.tar.zst | head -1)
-    pkgver_rel=$(basename "$pkgfile" | sed -E 's/^linux-([^-]+-[^-]+-[^-]+)-x86_64\.pkg\.tar\.zst$/\1/')
+    pkgver_rel=$(basename "$pkgfile" | sed -E 's/^linux-(.*)-x86_64\.pkg\.tar\.zst$/\1/')
     installed=$(pacman -Q linux 2>/dev/null | awk '{print $2}')
     if [ "$pkgver_rel" = "$installed" ]; then
         echo "    patched kernel $installed already installed"
@@ -154,11 +154,25 @@ if [ "$CHANGED" = 1 ]; then
     BACKUP_DIR="/var/backup/initramfs-pre-spi"
     sudo mkdir -p "$BACKUP_DIR"
     stamp="$(date +%Y%m%d-%H%M%S)"
-    for img in /boot/vmlinuz-*; do
+    # Omarchy boots a UKI; the classic /boot/vmlinuz-* layout is kept as a
+    # belt-and-braces backup and the limine UKI is backed up when present.
+    for img in /boot/vmlinuz-* /boot/linux.efi; do
         [ -e "$img" ] || continue
         sudo cp -a "$img" "$BACKUP_DIR/$(basename "$img").$stamp" 2>/dev/null || true
     done
-    sudo mkinitcpio -P
+    if command -v limine-mkinitcpio >/dev/null 2>&1; then
+        # Omarchy/limine: build the UKI directly. The pacman hook already
+        # rebuilt it for a kernel install; this covers modprobe.d / mkinitcpio
+        # drop-in changes made outside pacman. Calling limine-mkinitcpio
+        # bypasses Omarchy's /usr/local/bin/mkinitcpio wrapper, which would
+        # otherwise prompt interactively to run it.
+        sudo limine-mkinitcpio
+    elif compgen -G "/etc/mkinitcpio.d/*.preset" >/dev/null; then
+        # Classic mkinitcpio preset layout.
+        sudo /usr/bin/mkinitcpio -P
+    else
+        echo "    no initramfs mechanism detected (no limine, no presets); skipping"
+    fi
 else
     echo "    nothing changed; skipping rebuild"
 fi
