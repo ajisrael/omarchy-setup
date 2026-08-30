@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+# OpenCode Go usage collector for the omarchy.agents panel.
+#
+# Writes ~/.local/state/omarchy/agents/usage/opencode.json, which the panel
+# discovers on its own (any *.json in that dir is treated as a provider).
+# Kept fresh by the opencode-usage.timer user unit; the panel's own refresh
+# (omarchy-agent-usage-update) only rewrites the packaged collectors and
+# leaves this record alone.
+#
+# Source of truth: GET https://opencode.ai/zen/go/v1/usage, authenticated
+# with the opencode-go key that opencode itself keeps in auth.json. It
+# returns the plan windows (rolling 5h / weekly / monthly) with a percent
+# (0-100) and an ISO resetsAt, plus a status. There is no Zen free-tier or
+# balance endpoint (opencode issues #10448 / #44189), so none is shown.
+set -euo pipefail
+
+USAGE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/agents/usage"
+AUTH="$HOME/.local/share/opencode/auth.json"
+ENDPOINT="https://opencode.ai/zen/go/v1/usage"
+OUT="$USAGE_DIR/opencode.json"
+
+record_failed() {
+  # A record with limits empty and a status line reads like every other
+  # collector's "unavailable" state and keeps the panel honest instead of
+  # leaving a stale number on screen.
+  printf '%s\n' \
+    "{\"schemaVersion\":1,\"id\":\"opencode\",\"name\":\"OpenCode Go\",\"updatedAt\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"ready\":false,\"hasLocalStats\":false,\"tierLabel\":\"Go\",\"usageStatusText\":\"OpenCode Go usage unavailable\",\"authHelpText\":\"Check the opencode-go API key in ~/.local/share/opencode/auth.json.\",\"limits\":[]}"
+}
+
+write_record() {
+  mkdir -p "$USAGE_DIR"
+  local tmp="$USAGE_DIR/.opencode.$$.tmp"
+  printf '%s\n' "$1" >"$tmp"
+  mv "$tmp" "$OUT"
+}
+
+record=""
+if [[ -r $AUTH ]]; then
+  key=$(python3 -c "import json,sys;d=json.load(open(sys.argv[1]));print(d.get('opencode-go',{}).get('key',''))" "$AUTH" 2>/dev/null || true)
+fi
+if [[ -n ${key:-} ]]; then
+  payload=$(curl -fsS --max-time 20 -H "Authorization: Bearer $key" "$ENDPOINT" 2>/dev/null) || payload=""
+  if [[ -n $payload ]]; then
+    # Build the record with percent converted to a 0-1 fraction (the panel
+    # multiplies by 100 when it renders). Only include norms that came back.
+    record=$(python3 - "$payload" <<'PY'
+import datetime
+import json
+import sys
+
+raw = json.loads(sys.argv[1])
+usage = raw.get("usage", {}) or {}
+
+def window(kind, label, title=None):
+    w = usage.get(kind) or {}
+    if w.get("status") != "ok":
+        return None
+    try:
+        percent = float(w.get("percent", 0)) / 100.0
+    except Exception:
+        return None
+    entry = {"label": label, "percent": percent, "resetsAt": w.get("resetsAt", "")}
+    if title:
+        entry["title"] = title
+    return entry
+
+limits = [x for x in [
+    window("rolling", "5-Hour", "Session"),
+    window("weekly", "Weekly"),
+    window("monthly", "Monthly"),
+] if x]
+
+record = {
+    "schemaVersion": 1,
+    "id": "opencode",
+    "name": "OpenCode Go",
+    "updatedAt": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    "ready": len(limits) > 0,
+    "hasLocalStats": False,
+    "tierLabel": "Go",
+    "limits": limits,
+}
+print(json.dumps(record, separators=(",", ":"), sort_keys=True))
+PY
+) || record=""
+  fi
+fi
+
+if [[ -z $record || $record == "null" ]]; then
+  record=$(record_failed)
+fi
+write_record "$record"

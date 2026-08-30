@@ -115,9 +115,16 @@
     ".config/blesh/init.sh".source = link "blesh/init.sh";
     # Lid sleep override: toggle script + the user unit it starts/stops
     # (systemd-inhibit handle-lid-switch). Needs the logind drop-in from
-    # build/omarchy-setup.sh to have any effect.
+    # build/omarchy-setup.sh to have any effect. The unit is declarative and
+    # started on demand by ~/.local/bin/lid-sleep (never enabled, so a reboot
+    # always returns to closing-the-lid-suspends).
     ".local/bin/lid-sleep".source = link "bin/lid-sleep";
-    ".config/systemd/user/lid-awake.service".source = link "systemd/user/lid-awake.service";
+    # OpenCode Go usage for the omarchy.agents bar panel: the collector writes
+    # ~/.local/state/omarchy/agents/usage/opencode.json (the panel discovers
+    # it on its own), refreshed by the declarative user timer. No packaged
+    # omarchy-agent-usage-* collector covers opencode, and the update script
+    # only scans the read-only package bin, so this runs standalone.
+    ".local/bin/omarchy-agent-usage-opencode".source = link "bin/omarchy-agent-usage-opencode";
     # opencode: force-clobbers the stock omarchy seeds with the real configs
     # (MCP servers, permissions, theme, vim plugin). Restart opencode after a
     # switch to pick up changes. node_modules/ next to these are runtime state.
@@ -129,5 +136,32 @@
       source = link "opencode/tui.json";
       force = true;
     };
+  };
+
+  # User systemd units, generated and enabled declaratively by home-manager
+  # (no manual `systemctl --user enable` needed on switch). These replace the
+  # earlier raw unit-file links in home.file.
+  systemd.user.enable = true;
+  systemd.user.services.lid-awake = {
+    Unit.Description = "Lid-close suspend inhibitor (agents keep working with lid closed)";
+    Service = {
+      Type = "simple";
+      ExecStart = "/usr/bin/systemd-inhibit --what=handle-lid-switch sleep infinity";
+    };
+  };
+  systemd.user.services.opencode-usage = {
+    Unit.Description = "Refresh OpenCode Go usage record for the omarchy.agents panel";
+    Service = {
+      Type = "oneshot";
+      ExecStart = "%h/.local/bin/omarchy-agent-usage-opencode";
+    };
+  };
+  systemd.user.timers.opencode-usage = {
+    Unit.Description = "Refresh OpenCode Go usage every 15 minutes for the omarchy.agents panel";
+    Timer = {
+      OnBootSec = "2min";
+      OnUnitActiveSec = "15min";
+    };
+    Install.WantedBy = [ "timers.target" ];
   };
 }
