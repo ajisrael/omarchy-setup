@@ -12,7 +12,8 @@
       "~/.claude/skills/**": "allow",
       "~/.config/nvim/**": "allow",
       "~/.config/omarchy/**": "allow",
-      "~/.config/opencode/**": "allow"
+      "~/.config/opencode/**": "allow",
+      "~/.pi/agent/**": "allow"
     },
     "edit": {
       "*": "allow",
