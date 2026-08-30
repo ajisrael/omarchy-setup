@@ -25,6 +25,9 @@
 #       /etc/libinput/local-overrides.quirks (tags the SPI keyboard as
 #       internal so libinput's disable-while-typing actually fires)
 #   - config/actkbd/*                   -> F5/F6 keyboard-backlight stepping
+#   - config/systemd/system-sleep/brcmfmac-reload ->
+#       /usr/lib/systemd/system-sleep/ (reloads brcmfmac on resume to recover
+#       a hung BCM43602 Wi-Fi chip after suspend)
 #   - patched kernel packages           -> pacman -U from ~/build/linux/linux/
 #   - IgnorePkg hold in /etc/pacman.conf + the pre-refresh-pacman hook that
 #       re-adds it after `omarchy refresh pacman` rewrites pacman.conf
@@ -83,6 +86,12 @@ else
     # (KillUserProcesses defaults to no).
     sudo systemctl restart systemd-logind
 fi
+
+echo "==> system-sleep brcmfmac-reload hook"
+SLEEP_SRC="$DIR/config/systemd/system-sleep/brcmfmac-reload"
+[ -e "$SLEEP_SRC" ] || { echo "missing $SLEEP_SRC" >&2; exit 1; }
+# No CHANGED bump: a system-sleep hook needs no initramfs/UKI rebuild.
+sudo install -Dm755 "$SLEEP_SRC" /usr/lib/systemd/system-sleep/brcmfmac-reload
 
 echo "==> libinput quirks"
 quirk_src="$LIBINPUT_SRC/local-overrides.quirks"

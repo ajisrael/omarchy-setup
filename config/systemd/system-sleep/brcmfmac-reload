@@ -1,0 +1,21 @@
+#!/bin/bash
+# Reload the brcmfmac module after resume to recover from a hung BCM43602
+# Wi-Fi chip (MacBookPro12,1). On some suspend/resume cycles the chip
+# firmware stalls and stops answering the driver (brcmf_msgbuf_query_dcmd:
+# Timeout on response - err -5), leaving the radio unable to scan/associate:
+# no networks listed, just the still-functional NM/Quickshell menu.
+# Reloading the module forces a PCIe reset of the card and restores Wi-Fi.
+
+if [[ $1 != "post" ]]; then
+  exit 0
+fi
+
+# Only bother on the Broadcom BCM43602 (14e4:43ba) this hook targets.
+if ! lspci -n -d 14e4:43ba 2>/dev/null | grep -q .; then
+  exit 0
+fi
+
+[ -d /sys/module/brcmfmac ] || exit 0
+
+modprobe -r brcmfmac 2>/dev/null
+modprobe brcmfmac 2>/dev/null
