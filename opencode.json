@@ -1,14 +1,18 @@
-{
+{ 
   "$schema": "https://opencode.ai/config.json",
   "permission": {
     "external_directory": {
-      "/tmp/opencode/**": "allow",
-      "~/.agents/skills/**": "allow",
-      "~/.claude/skills/**": "allow",
-      "/usr/share/omarchy/**": "allow",
-      "~/.config/nvim/**": "allow",
       "/etc/**": "allow",
-      "/usr/**": "allow"
+      "/tmp/**": "allow",
+      "/tmp/opencode/**": "allow",
+      "/usr/**": "allow",
+      "/usr/share/omarchy/**": "allow",
+      "~/.agents/skills/**": "allow",
+      "~/.local/share/opencode/**": "allow",
+      "~/.claude/skills/**": "allow",
+      "~/.config/nvim/**": "allow",
+      "~/.config/omarchy/**": "allow",
+      "~/.config/opencode/**": "allow"
     },
     "edit": {
       "*": "allow",
