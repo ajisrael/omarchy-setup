@@ -6,6 +6,7 @@
     "external_directory": {
       "~/examples/**": "allow",
       "~/learning/**": "allow",
+      "~/.config/pi/**": "allow",
       "/tmp/opencode/**": "allow"
     }
   },
