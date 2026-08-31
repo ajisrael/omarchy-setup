@@ -5,6 +5,7 @@
   "permission": {
     "external_directory": {
       "~/examples/**": "allow",
+      "~/learning/**": "allow",
       "/tmp/opencode/**": "allow"
     }
   },
