@@ -17,9 +17,10 @@ esac
 # (don't mess with these directly, just overwrite them here!)
 source "$OMARCHY_PATH/default/bash/rc"
 
-# tmux sessionizer scripts (home-manager's home.sessionPath also wires this;
-# duplicated here so the PATH works before the first HM switch too)
-export PATH="$HOME/omarchy-setup/config/tmux/tmux-scripts:$PATH"
+# tmux sessionizer scripts + pinned npm CLIs (home-manager's home.sessionPath
+# also wires these via hm-session-vars.sh, but this box never sources that
+# file - duplicated here so the PATH works before/without the HM switch).
+export PATH="$HOME/omarchy-setup/config/tmux/tmux-scripts:$HOME/.npm-global/bin:$PATH"
 
 # Personal fragments (EDITOR, aliases, opencode wrapper, C-f sessionizer, direnv hook)
 if [[ -r "$HOME/omarchy-setup/config/bash/bashrc-personal" ]]; then

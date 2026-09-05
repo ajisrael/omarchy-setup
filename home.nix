@@ -1,9 +1,20 @@
 # home-manager, user scope ONLY. Omarchy owns the desktop (Hyprland config,
 # Quickshell shell/bar, themes, terminal theme integration) and all of /etc;
 # this module owns the disjoint $HOME surface: ssh, direnv, the composed
-# .bashrc + tmux conf links, opencode JSONs, and packages that are not in
-# the Arch repos. Do not expand it into desktop-config generation.
+# .bashrc + tmux conf links, opencode JSONs, agent skills, and packages that
+# are not in the Arch repos. Do not expand it into desktop-config generation.
 { pkgs, config, treehousePackage, ... }:
+
+let
+  repo = "/home/ajisrael/omarchy-setup";
+
+  # Nix's nodejs package defaults npm's global-install prefix to its own
+  # /nix/store path, which is read-only - `npm install -g` fails with EACCES
+  # under it unconditionally. Redirect global installs to a writable, stable
+  # location instead (mirrors the macOS dotfiles repo).
+  npmGlobalPrefix = "${config.home.homeDirectory}/.npm-global";
+in
+
 {
   home.username = "ajisrael";
   home.homeDirectory = "/home/ajisrael";
@@ -63,13 +74,17 @@
     silent = true;
   };
 
-  # tmux-sessionizer scripts on PATH so prefix-f / C-f resolve them.
-  home.sessionPath = [ "/home/ajisrael/omarchy-setup/config/tmux/tmux-scripts" ];
+  # tmux-sessionizer scripts on PATH so prefix-f / C-f resolve them; the npm
+  # global prefix (installAxi activation below) gives the pinned axi-family
+  # CLIs (lavish) their bin dir.
+  home.sessionPath = [
+    "/home/ajisrael/omarchy-setup/config/tmux/tmux-scripts"
+    "${npmGlobalPrefix}/bin"
+  ];
 
   # Live-editable configs: plain files in the repo, symlinked into $HOME.
   # Editing the file in place is instantly picked up - no re-switch needed.
   home.file = let
-    repo = "/home/ajisrael/omarchy-setup";
     link = path:
       config.lib.file.mkOutOfStoreSymlink "${repo}/config/${path}";
   in {
@@ -146,7 +161,44 @@
       source = link "pi/models.json";
       force = true;
     };
+    # Agent skills: gh-axi / chrome-devtools-axi / lavish - vendored, pinned
+    # versions. Each repo copy (config/skills/<name>/SKILL.md) is regenerated
+    # from its pinned npm package by the installAxi activation below, then
+    # linked here so this box's harnesses pick it up. ~/.agents/skills is the
+    # generic convention (opencode, codex, etc.); ~/.claude/skills is Claude
+    # Code's.
+    ".agents/skills/gh-axi/SKILL.md".source = link "skills/gh-axi/SKILL.md";
+    ".claude/skills/gh-axi/SKILL.md".source = link "skills/gh-axi/SKILL.md";
+    ".agents/skills/chrome-devtools-axi/SKILL.md".source = link "skills/chrome-devtools-axi/SKILL.md";
+    ".claude/skills/chrome-devtools-axi/SKILL.md".source = link "skills/chrome-devtools-axi/SKILL.md";
+    ".agents/skills/lavish/SKILL.md".source = link "skills/lavish/SKILL.md";
+    ".claude/skills/lavish/SKILL.md".source = link "skills/lavish/SKILL.md";
+    # Global agent context (port of dotfiles' home/AGENTS.md + instructions):
+    # one canonical file each, symlinked to the harness locations. Unlike the
+    # dotfiles repo this only wires opencode (no claude/codex).
+    # ~/.config/opencode/AGENTS.md is opencode's global agent file; the
+    # ~/.agents/instructions/ docs are referenced from it and from AGENTS.md.
+    ".config/opencode/AGENTS.md".source = link "agents/AGENTS.md";
+    ".agents/instructions/INSTALLATIONS.md".source = link "agents/instructions/INSTALLATIONS.md";
+    ".agents/instructions/COMMITS.md".source = config.lib.file.mkOutOfStoreSymlink "${repo}/docs/COMMITS.md";
   };
+
+  # Pin the axi-family CLIs (kunchenguid's agent-ergonomic wrappers) to an
+  # exact, reviewed npm version and install them globally, instead of letting
+  # their own documented `npx -y <pkg>` skill instructions re-fetch unpinned
+  # from the npm registry on every agent invocation. Bumping a version is a
+  # deliberate, reviewed edit to config/skills/install-axi.sh (kept as a
+  # plain shell script, not inlined here, so it can be run and debugged
+  # directly - `bash config/skills/install-axi.sh <npm> <jq> config/skills` -
+  # without going through a full rebuild switch). Idempotent: only reinstalls
+  # when the installed version doesn't match the pin. Also regenerates each
+  # package's local skills/<name>/SKILL.md from its own shipped copy on every
+  # run, and home.file above links it into the harness skill dirs.
+  home.activation.installAxi = config.lib.dag.entryAfter [ "writeBoundary" ] ''
+    export NPM_CONFIG_PREFIX="${npmGlobalPrefix}"
+    $DRY_RUN_CMD ${pkgs.bash}/bin/bash "${repo}/config/skills/install-axi.sh" \
+      "${pkgs.nodejs}/bin/npm" "${pkgs.jq}/bin/jq" "${repo}/config/skills"
+  '';
 
   # User systemd units, generated and enabled declaratively by home-manager
   # (no manual `systemctl --user enable` needed on switch). These replace the

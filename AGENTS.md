@@ -67,7 +67,12 @@ HM stays user-scope only and must not expand into desktop-config territory:
 
 - HM owns: `.bashrc` (composed over omarchy's env-bootstrap + rc),
   `.ssh/config`, `.config/git/ignore`, `.config/tmux/tmux.conf`,
-  opencode JSONs, `home.sessionPath` (tmux-scripts), and packages not in
+  opencode JSONs, agent skills (config/skills/, linked into
+  `~/.agents/skills/` + `~/.claude/skills/`), the global agent context
+  (config/agents/AGENTS.md as `~/.config/opencode/AGENTS.md`, plus
+  instructions into `~/.agents/instructions/`), the npm-global prefix that
+  holds pinned axi-family CLIs (see config/skills/install-axi.sh),
+  `home.sessionPath` (tmux-scripts, npm-global bin), and packages not in
   Arch repos (treehouse, uv).
 - Package placement rule: available in the Arch repos -> `omarchy pkg add`
   (system layer, e.g. ansible-core). AUR-only -> `yay` directly (system layer,
