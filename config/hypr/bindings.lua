@@ -28,6 +28,10 @@ hl.unbind("PRINT")
 o.bind("CTRL + SHIFT + 4", "Screenshot (region)", "omarchy capture screenshot region")
 o.bind("CTRL + SHIFT + S", "Screenshot (fullscreen)", "omarchy capture screenshot fullscreen")
 
+-- OCR text extraction (was SUPER + CTRL + PRINT, but no Print key on this keyboard)
+hl.unbind("SUPER + CTRL + PRINT")
+o.bind("SUPER + CTRL + SHIFT + 4", "Extract text (OCR)", "omarchy capture text")
+
 -- ---------------------------------------------------------------------------
 -- Personal bindings (omarchy-setup)
 --
