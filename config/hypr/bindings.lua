@@ -23,6 +23,11 @@
 -- Disable a default binding without replacing it.
 -- hl.unbind("SUPER + SHIFT + B")
 
+-- Screenshot keybindings (replaces default PRINT binding)
+hl.unbind("PRINT")
+o.bind("CTRL + SHIFT + 4", "Screenshot (region)", "omarchy capture screenshot region")
+o.bind("CTRL + SHIFT + S", "Screenshot (fullscreen)", "omarchy capture screenshot fullscreen")
+
 -- ---------------------------------------------------------------------------
 -- Personal bindings (omarchy-setup)
 --
