@@ -7,6 +7,7 @@
       "~/examples/**": "allow",
       "~/learning/**": "allow",
       "~/.config/pi/**": "allow",
+      "~/.config/hypr/**": "allow",
       "/tmp/opencode/**": "allow"
     }
   },
