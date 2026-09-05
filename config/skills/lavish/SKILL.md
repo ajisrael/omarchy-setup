@@ -13,7 +13,7 @@ metadata:
 
 Lavish Editor helps agents turn rich HTML artifacts into collaborative human review surfaces. Whenever you are about to give user a complex response that will be easier to understand via a rich / interactive page, consider using Lavish Editor. First generate an interactive HTML artifact according to user request, then run `lavish-axi <html-file>` so the user can visually review it, annotate elements or selected text, queue prompts, and send feedback back through `lavish-axi poll`.
 
-lavish-axi is installed globally and pinned to an exact version by omarchy-setup's home.nix - invoke it directly with `lavish-axi <html-file>`.
+lavish-axi is installed globally and pinned to an exact version by omarchy-setup's install-axi.sh - invoke it directly with `lavish-axi <html-file>`.
 If lavish-axi output shows a follow-up command starting with `lavish-axi`, run it as `lavish-axi ...` instead.
 In restricted subprocess sandboxes, CI, or agent harnesses where `npx -y` exits opaquely (for example with status 216), use an already-installed copy directly: `node "$(npm root)/lavish-axi/dist/cli.mjs" <html-file>` for a local install, `node "$(npm root -g)/lavish-axi/dist/cli.mjs" <html-file>` for a global install, or the bare `lavish-axi <html-file>` bin after installing once.
 
@@ -86,8 +86,9 @@ For flows, architecture, state, or sequence diagrams, do not hand-build boxes-an
 ## Version pinning on this machine
 
 Do not run `lavish-axi update` - it self-updates via npm and would drift from
-the version pinned in omarchy-setup's `home.nix`, until the next
-`./rebuild.sh` silently reinstalls the pinned version over it. To upgrade,
-tell the user to bump the pinned version in `home.nix` and run
-`./rebuild.sh` - that regenerates this skill file to match automatically.
+the version pinned in omarchy-setup's `config/skills/install-axi.sh`, until
+the next `./rebuild.sh` silently reinstalls the pinned version over it. To
+upgrade, tell the user to bump the pinned version in
+`config/skills/install-axi.sh` and run `./rebuild.sh` - that regenerates
+this skill file to match automatically.
 `lavish-axi update --check` (read-only, does not install) is still fine to run.

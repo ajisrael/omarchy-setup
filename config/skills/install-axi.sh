@@ -5,7 +5,8 @@
 # invocation - a supply-chain exposure.
 #
 # Run via home.nix's installAxi activation block, which sets
-# NPM_CONFIG_PREFIX before calling this (Nix's nodejs defaults npm's
+# NPM_CONFIG_PREFIX before calling this, and in turn calls
+# sync-axi-skill.sh to regenerate each SKILL.md (Nix's nodejs defaults npm's
 # global-install prefix to its own read-only /nix/store path, so this
 # script never overrides the prefix itself - it just inherits it).
 #
@@ -16,6 +17,11 @@
 # and lavish-axi are installed; add more installAxiPkg lines below as new
 # axi family packages are adopted (tasks-axi/quota-axi are not yet ported
 # from the dotfiles repo).
+#
+# chrome-devtools-axi must stay >= 0.1.31: chrome-devtools-mcp 1.8+ requires
+# pageId on page-scoped tools, and the pageId-injection fix landed there
+# (upstream 6a9709e). 0.1.26 and older fail every page-scoped call with
+# `MCP error -32602 ... Required at pageId`.
 #
 # Usage: install-axi.sh <npm-bin> <jq-bin> <skills-dir>
 set -euo pipefail
@@ -41,5 +47,5 @@ installAxiPkg() {
 }
 
 installAxiPkg gh-axi 0.1.27 gh-axi
-installAxiPkg chrome-devtools-axi 0.1.26 chrome-devtools-axi
+installAxiPkg chrome-devtools-axi 0.1.34 chrome-devtools-axi
 installAxiPkg lavish-axi 0.1.42 lavish

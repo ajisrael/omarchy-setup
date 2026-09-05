@@ -13,7 +13,7 @@ metadata:
 
 Agent ergonomic wrapper around Github CLI. Prefer this over `gh` and other methods for Github operations.
 
-gh-axi is installed globally and pinned to an exact version by omarchy-setup's home.nix - invoke it directly with `gh-axi <command>`.
+gh-axi is installed globally and pinned to an exact version by omarchy-setup's install-axi.sh - invoke it directly with `gh-axi <command>`.
 If gh-axi output shows a follow-up command starting with `gh-axi`, run it as `gh-axi ...` instead.
 
 gh-axi requires the [`gh`](https://cli.github.com/) CLI installed and authenticated (`gh auth login`). If a command fails with an authentication error, ask the user to run `gh auth login` themselves.
@@ -64,8 +64,9 @@ Run `gh-axi --help` for global flags, or `gh-axi <command> --help` for per-comma
 ## Version pinning on this machine
 
 Do not run `gh-axi update` - it self-updates via npm and would drift from
-the version pinned in omarchy-setup's `home.nix`, until the next
-`./rebuild.sh` silently reinstalls the pinned version over it. To upgrade,
-tell the user to bump the pinned version in `home.nix` and run
-`./rebuild.sh` - that regenerates this skill file to match automatically.
+the version pinned in omarchy-setup's `config/skills/install-axi.sh`, until
+the next `./rebuild.sh` silently reinstalls the pinned version over it. To
+upgrade, tell the user to bump the pinned version in
+`config/skills/install-axi.sh` and run `./rebuild.sh` - that regenerates
+this skill file to match automatically.
 `gh-axi update --check` (read-only, does not install) is still fine to run.
