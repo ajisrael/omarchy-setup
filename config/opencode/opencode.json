@@ -6,6 +6,7 @@
     "external_directory": {
       "~/examples/**": "allow",
       "~/learning/**": "allow",
+      "~/.agents/**": "allow",
       "~/.config/pi/**": "allow",
       "~/.config/hypr/**": "allow",
       "/tmp/opencode/**": "allow"
