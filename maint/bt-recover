@@ -1,19 +1,34 @@
 #!/usr/bin/env bash
 # Recover the internal Broadcom Bluetooth controller (05ac:8290 BCM20703A1
-# in the MacBookPro12,1) after the intermittent boot-time failure where the
-# HCI reset times out ("hci0: BCM: Reset failed (-110)"). When that happens
-# BlueZ sees no adapter at all, so the bar's bluetooth widget disappears.
+# in the MacBookPro12,1) after a failure.
 #
-# The fix is a sysfs `authorized` toggle: it power-cycles the USB device and
-# lets btusb re-probe cleanly. A plain btusb unbind/rebind is NOT enough (the
-# firmware reset keeps failing) and a full usb-driver unbind can wedge the
-# device until this same toggle.
+# Two failure modes are covered:
+#  1. Mgmt layer down: the boot-time HCI reset times out ("hci0: BCM: Reset
+#     failed (-110)") and BlueZ exposes no adapter at all, so the bar's
+#     bluetooth widget disappears.
+#  2. Radio wedged with mgmt up: the adapter reports "Powered" and btmgmt
+#     answers, but the radio is silent - a scan finds no devices (even
+#     paired ones) and connections hang forever. Pure mgmt checks miss this.
 #
-# Run as your normal user (the two sysfs writes self-sudo). Safe to re-run:
-# if the controller is already present it is a no-op.
+# The fix is the same for both: a sysfs `authorized` toggle that power-cycles
+# the USB device and lets btusb re-probe cleanly. A plain btusb unbind/rebind
+# is NOT enough (the firmware reset keeps failing) and a full usb-driver
+# unbind can wedge the device until this same toggle.
+#
+# Run as your normal user (the two sysfs writes self-sudo). Healthy systems
+# are a no-op; use --force to power-cycle even when mgmt reports up, and
+# --check to probe health without touching anything.
 set -euo pipefail
 
 BT_USB_PRODUCT="05ac:8290"
+FORCE=0
+CHECK_ONLY=0
+if [[ "${1:-}" == "--force" ]]; then
+    FORCE=1
+fi
+if [[ "${1:-}" == "--check" ]]; then
+    CHECK_ONLY=1
+fi
 
 find_device() {
     for dev in /sys/bus/usb/devices/*/; do
@@ -39,17 +54,63 @@ wait_for_adapter() {
     return 1
 }
 
-# Already healthy - nothing to do.
+radio_scans() {
+    # A wedged radio's mgmt layer answers but its air interface is dead:
+    # a scan finds nothing at all. Probe with a bounded active scan and
+    # consider it healthy only if at least one device answers.
+    local log
+    log=$(mktemp)
+    timeout 15 bluetoothctl --timeout 8 scan on >"$log" 2>&1 || true
+    # Healthy radios ID known and new devices alike ([CHG]/[NEW] Device <mac>).
+    if grep -qE 'Device [0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:' "$log" 2>/dev/null; then
+        rm -f "$log"
+        return 0
+    fi
+    rm -f "$log"
+    return 1
+}
+
+health_status() {
+    if ! wait_for_adapter; then
+        echo "degraded (no adapter: HCI reset failed at boot)"
+    elif radio_scans; then
+        echo "healthy"
+    else
+        echo "degraded (mgmt up but radio silent - scan finds no devices)"
+    fi
+}
+
+# --check: report health without touching anything.
+if [[ "$CHECK_ONLY" -eq 1 ]]; then
+    STATUS=$(health_status)
+    echo "Bluetooth health: $STATUS"
+    [[ "$STATUS" == "healthy" ]] && exit 0 || exit 1
+fi
+
+MGMT_UP=0
 if wait_for_adapter; then
-    echo "Bluetooth controller already up."
+    MGMT_UP=1
+fi
+
+if [[ "$MGMT_UP" -eq 1 ]] && radio_scans && [[ "$FORCE" -ne 1 ]]; then
+    echo "Bluetooth controller healthy (mgmt up, radio scans)."
     exit 0
+fi
+
+if [[ "$MGMT_UP" -eq 1 ]] && [[ "$FORCE" -ne 1 ]]; then
+    echo "WARNING: btmgmt reports the adapter up, but a scan found no"
+    echo "devices. The radio may be wedged in place (Kinesis/Buds all"
+    echo "silent, connects hang). Power-cycling the controller..."
+elif [[ "$MGMT_UP" -eq 1 ]]; then
+    echo "--force given; power-cycling the controller anyway."
+else
+    echo "Bluetooth adapter missing; power-cycling USB device..."
 fi
 
 DEV=$(find_device) || {
     echo "No 05ac:8290 Bluetooth USB device found - nothing to recover." >&2
     exit 1
 }
-echo "Bluetooth adapter missing; power-cycling USB device ${DEV}..."
 
 # `authorized` power-cycles the port logically (disconnect + full re-probe).
 # Root only; the writes self-sudo.
@@ -62,6 +123,12 @@ sudo sh -c "echo 1 > ${DEV}authorized"
 if wait_for_adapter; then
     echo "Bluetooth controller recovered:"
     btmgmt info 2>/dev/null
+    if radio_scans; then
+        echo "Radio verified: scan finds devices."
+    else
+        echo "WARNING: radio still silent after power-cycle. The controller"
+        echo "may need a reboot, or check with: bluetoothctl --timeout 8 scan on"
+    fi
 else
     echo "Controller still not up after power-cycle; try a reboot." >&2
     exit 1
