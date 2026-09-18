@@ -15,9 +15,20 @@ globally, use this priority order:
    System layer, reproducible and declarative, rolls back cleanly with
    pacman. `omarchy pkg add` is just `pacman -S`; check the package exists
    in the repos first.
+
+   Note: `omarchy pkg add` prompts for a sudo password over an interactive
+   tty. An agent without a visible terminal (opencode/CLI) cannot run it -
+   it fails with "sudo: a terminal is required to read the password". Route
+   global installs through the user or their omarchy setup agent instead of
+   attempting them from an agent shell.
 2. **AUR directly via `yay <name>`** - second choice, for packages with no
    Arch repo package. `omarchy pkg add` cannot reach the AUR, so use `yay`
-   directly (e.g. blesh-git). Still system layer.
+   directly (e.g. blesh-git, waynergy). Still system layer.
+   Note: `waynergy` (synergy client for Wayland) needs NO system config on
+   this box - its `wlr` backend injects via Hyprland's virtual
+   pointer/keyboard protocols, and CLI/unit config lives in HM
+   (`config/waynergy/config.ini` + `waynergy.service`). Do not add uinput
+   udev rules or groups unless the wlr backend ever stops working.
 3. **Nix (`home.packages` in `home.nix`)** - last resort, only when the
    package isn't in the Arch repos or AUR at all, or when it needs
    user-scope pinning (e.g. treehouse, uv - both lack Arch packages). Runs
