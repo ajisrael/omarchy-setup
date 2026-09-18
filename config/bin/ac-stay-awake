@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# Stay awake and unlocked while external power is connected, by flipping
+# Omarchy's stay-awake flag (~/.local/state/omarchy/indicators/stay-awake).
+# The shell's idle service watches that file and, while it is present, skips
+# the screensaver and the auto-lock, so on the charger the screen stays on and
+# never locks. On battery the flag is removed and normal idle behavior resumes
+# (Omarchy has no idle-suspend of its own, so staying awake is all that is
+# needed to keep the machine from "going to sleep" while plugged in).
+#
+# Runs as the user systemd service ac-stay-awake.service (see home.nix) -
+# user-scope only, no root and no udev rules. Polls every 2s, so plug/unplug
+# is caught reliably even if a udev uevent never reaches the session.
+#
+# The marker file (in ~/.local/state/omarchy/toggles, same convention as
+# lid-sleep) tracks whether WE set the flag. A manual `omarchy toggle idle
+# stay-awake` on battery is therefore never silently cleared by this watcher;
+# only the flag we created gets removed when power is unplugged.
+set -u
+
+POLL_SECONDS=2
+STATE_DIR="$HOME/.local/state/omarchy/indicators"
+FLAG="$STATE_DIR/stay-awake"
+TOGGLES_DIR="$HOME/.local/state/omarchy/toggles"
+OUR_FLAG="$TOGGLES_DIR/ac-stay-awake"
+
+on_ac() {
+    omarchy power present 2>/dev/null
+}
+
+while true; do
+    if on_ac; then
+        mkdir -p "$STATE_DIR" "$TOGGLES_DIR"
+        if [[ ! -f "$FLAG" ]]; then
+            touch "$FLAG"
+            echo "AC power connected: stay-awake on (screen won't blank or auto-lock)"
+            omarchy-notification-send -g 󱐋 "Stay awake (plugged in)" \
+                "Screen stays on and unlocked while on AC power." >/dev/null 2>&1 || true
+        fi
+        touch "$OUR_FLAG"
+    elif [[ -f "$OUR_FLAG" ]]; then
+        # We set the flag and are no longer on AC - restore normal idle.
+        rm -f "$FLAG"
+        rm -f "$OUR_FLAG"
+        echo "AC power removed: stay-awake off (normal idle and auto-lock restored)"
+    fi
+    sleep "$POLL_SECONDS"
+done

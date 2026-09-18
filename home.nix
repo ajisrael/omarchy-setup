@@ -135,6 +135,9 @@ in
     # started on demand by ~/.local/bin/lid-sleep (never enabled, so a reboot
     # always returns to closing-the-lid-suspends).
     ".local/bin/lid-sleep".source = link "bin/lid-sleep";
+    # AC power stay-awake watcher: flips Omarchy's idle stay-awake flag while
+    # plugged in (config/bin/ac-stay-awake + ac-stay-awake.service below).
+    ".local/bin/ac-stay-awake".source = link "bin/ac-stay-awake";
     # OpenCode Go usage for the omarchy.agents bar panel: the collector writes
     # ~/.local/state/omarchy/agents/usage/opencode.json (the panel discovers
     # it on its own), refreshed by the declarative user timer. No packaged
@@ -181,6 +184,13 @@ in
     ".config/opencode/AGENTS.md".source = link "agents/AGENTS.md";
     ".agents/instructions/INSTALLATIONS.md".source = link "agents/instructions/INSTALLATIONS.md";
     ".agents/instructions/COMMITS.md".source = config.lib.file.mkOutOfStoreSymlink "${repo}/docs/COMMITS.md";
+    # Waynergy, the Wayland synergy client: only config.ini is linked; the
+    # tls/hash dir (server cert pins) stays unmanaged runtime state next to it.
+    # The binary itself is AUR-only (yay, system layer) - wlr backend injects
+    # via Hyprland's virtual pointer/keyboard, no uinput privileges needed.
+    ".config/waynergy/config.ini".source = link "waynergy/config.ini";
+    # macOS-primary keycode map (kVK+8) - see config/waynergy/xkb_keymap.
+    ".config/waynergy/xkb_keymap".source = link "waynergy/xkb_keymap";
   };
 
   # Pin the axi-family CLIs (kunchenguid's agent-ergonomic wrappers) to an
@@ -225,5 +235,31 @@ in
       OnUnitActiveSec = "15min";
     };
     Install.WantedBy = [ "timers.target" ];
+  };
+  # Stay awake and unlocked while on AC power (auto-starts at login). The
+  # script only sets Omarchy's stay-awake flag when the charger is in, removes
+  # it when power leaves - on battery, normal screensaver/auto-lock resume.
+  systemd.user.services.ac-stay-awake = {
+    Unit.Description = "Stay awake and unlocked while on AC power";
+    Service = {
+      Type = "simple";
+      ExecStart = "%h/.local/bin/ac-stay-awake";
+      Restart = "on-failure";
+      RestartSec = "2";
+    };
+    Install.WantedBy = [ "default.target" ];
+  };
+  # Waynergy: connect to the synergy server and inject its input into Hyprland
+  # via wlroots virtual pointer/keyboard protocols. Kept as a user service so
+  # the secondary screen is always reachable; log via journalctl --user -u waynergy.
+  systemd.user.services.waynergy = {
+    Unit.Description = "Synergy client for Wayland (Hyprland input injection)";
+    Service = {
+      Type = "simple";
+      ExecStart = "/usr/bin/waynergy";
+      Restart = "always";
+      RestartSec = "3";
+    };
+    Install.WantedBy = [ "graphical-session.target" ];
   };
 }

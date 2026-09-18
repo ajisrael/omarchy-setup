@@ -72,8 +72,29 @@ HM stays user-scope only and must not expand into desktop-config territory:
   (config/agents/AGENTS.md as `~/.config/opencode/AGENTS.md`, plus
   instructions into `~/.agents/instructions/`), the npm-global prefix that
   holds pinned axi-family CLIs (see config/skills/install-axi.sh),
-  `home.sessionPath` (tmux-scripts, npm-global bin), and packages not in
-  Arch repos (treehouse, uv).
+  `home.sessionPath` (tmux-scripts, npm-global bin), packages not in
+  Arch repos (treehouse, uv), and the AC stay-awake watcher
+  (`config/bin/ac-stay-awake` -> `~/.local/bin/`, `ac-stay-awake.service`
+  user unit): flips Omarchy's idle stay-awake flag while plugged in so the
+  screen never blanks or locks on AC power, and the waynergy client
+  (`config/waynergy/config.ini` -> `~/.config/waynergy/`, `waynergy.service`
+  user unit): the AUR `waynergy` binary is the system layer, its wlr backend
+  injects the synergy server's input via Hyprland's virtual pointer/keyboard
+  (no portal, no uinput). The synergy server is a macOS primary, so the
+  waynergy config pins the mac keycodes map (`xkb_keymap`, kVK+8 codes) with
+  `xkb_key_offset = 7` - keyboard keys arrive as raw macOS scancodes, not evdev.
+  Mac Command is an exception: the server sends it as raw 56 (kVK+1), so the
+  `[raw-keymap]` entry `56 = 64` is what makes it land on Super. Two layers are
+  load-bearing and both live in the repo:
+  (1) `56 = 64` (+ xkb_key_offset 7 = keycode 71) so the wlr backend emits
+  71 - 8 = 63 = the `LWIN` keycode in the mac map; and (2) the keymap ALSO maps
+  keycode 71 to `Super_L` (`<LWIN2> = 71` + symbols entry): Hyprland keybinds
+  read `m_lastMods` from waynergy's `modifiers` request, which is serialized
+  from waynergy's own internal xkb state fed by keycode 71. Without layer (2)
+  the Command key types text but never triggers SUPER keybinds (workspace
+  switch etc.) - which is precisely the bug we fixed. When debugging, remember
+  waynergy tracks modifiers itself (synergy's server mod mask is ignored); the
+  emitted protocol keycode is always `key - 8`.
 - Package placement rule: available in the Arch repos -> `omarchy pkg add`
   (system layer, e.g. ansible-core). AUR-only -> `yay` directly (system layer,
   e.g. blesh-git) - `omarchy pkg add` is just `pacman -S`, it cannot reach AUR.
