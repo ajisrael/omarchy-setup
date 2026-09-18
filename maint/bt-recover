@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# Recover the internal Broadcom Bluetooth controller (05ac:8290 BCM20703A1
+# in the MacBookPro12,1) after the intermittent boot-time failure where the
+# HCI reset times out ("hci0: BCM: Reset failed (-110)"). When that happens
+# BlueZ sees no adapter at all, so the bar's bluetooth widget disappears.
+#
+# The fix is a sysfs `authorized` toggle: it power-cycles the USB device and
+# lets btusb re-probe cleanly. A plain btusb unbind/rebind is NOT enough (the
+# firmware reset keeps failing) and a full usb-driver unbind can wedge the
+# device until this same toggle.
+#
+# Run as your normal user (the two sysfs writes self-sudo). Safe to re-run:
+# if the controller is already present it is a no-op.
+set -euo pipefail
+
+BT_USB_PRODUCT="05ac:8290"
+
+find_device() {
+    for dev in /sys/bus/usb/devices/*/; do
+        [ -r "$dev/idVendor" ] || continue
+        vid=$(cat "$dev/idVendor")
+        pid=$(cat "$dev/idProduct")
+        if [[ "$vid:$pid" == "$BT_USB_PRODUCT" ]] && [ -e "$dev/authorized" ]; then
+            echo "$dev"
+            return 0
+        fi
+    done
+    return 1
+}
+
+wait_for_adapter() {
+    # BlueZ's management layer exposes the adapter as soon as hci0 registered.
+    for _ in $(seq 1 10); do
+        if btmgmt info 2>/dev/null | grep -q "Primary controller"; then
+            return 0
+        fi
+        sleep 1
+    done
+    return 1
+}
+
+# Already healthy - nothing to do.
+if wait_for_adapter; then
+    echo "Bluetooth controller already up."
+    exit 0
+fi
+
+DEV=$(find_device) || {
+    echo "No 05ac:8290 Bluetooth USB device found - nothing to recover." >&2
+    exit 1
+}
+echo "Bluetooth adapter missing; power-cycling USB device ${DEV}..."
+
+# `authorized` power-cycles the port logically (disconnect + full re-probe).
+# Root only; the writes self-sudo.
+echo "Disconnecting..."
+sudo sh -c "echo 0 > ${DEV}authorized"
+
+echo "Reconnecting..."
+sudo sh -c "echo 1 > ${DEV}authorized"
+
+if wait_for_adapter; then
+    echo "Bluetooth controller recovered:"
+    btmgmt info 2>/dev/null
+else
+    echo "Controller still not up after power-cycle; try a reboot." >&2
+    exit 1
+fi
