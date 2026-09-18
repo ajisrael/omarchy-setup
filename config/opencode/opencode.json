@@ -2,13 +2,15 @@
   "$schema": "https://opencode.ai/config.json",
   "model": "opencode/big-pickle",
   "default_agent": "build",
+  "plugin": [
+    "file:///home/ajisrael/code/round-table/plugins/opencode/round-table.ts"
+  ],
   "permission": {
     "external_directory": {
       "~/examples/**": "allow",
       "~/learning/**": "allow",
       "~/.agents/**": "allow",
-      "~/.config/pi/**": "allow",
-      "~/.config/hypr/**": "allow",
+      "~/.config/**": "allow",
       "/tmp/opencode/**": "allow"
     }
   },
