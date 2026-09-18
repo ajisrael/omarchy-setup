@@ -24,4 +24,15 @@ fi
 HM="$(command -v home-manager || echo "$HOME/.nix-profile/bin/home-manager")"
 "$HM" switch --flake "$DIR#archeus"
 
+# Hyprland does not auto-reload configs replaced by home-manager symlinks (e.g.
+# config/hypr/bindings.lua). Reload now so hypr changes land without an extra
+# step. Only meaningful inside a live Hyprland session; skip silently elsewhere.
+if timeout 5 hyprctl instances >/dev/null 2>&1; then
+  hyprctl reload >/dev/null
+  ERRORS="$(hyprctl configerrors)"
+  if [ -n "$ERRORS" ]; then
+    printf '%s\n' "WARNING: Hyprland config errors after reload:" "$ERRORS"
+  fi
+fi
+
 echo "Rebuild successful!"

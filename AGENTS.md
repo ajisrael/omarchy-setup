@@ -102,10 +102,20 @@ HM stays user-scope only and must not expand into desktop-config territory:
   (nix layer). Never both.
 - HM deliberately does NOT own: `~/.config/git/config` (hand-maintained on
   this box - don't add programs.git), `.config/nvim` (Phase 4.4 will link
-  the kickstart fork; omarchy-nvim seed stays until then), any hyprland/
-  shell/theme/terminal config (omarchy owns those).
+  the kickstart fork; omarchy-nvim seed stays until then), shell/theme/
+  terminal config (omarchy owns those).
+- Exception: the hyprland personal override stubs ARE HM-owned (Phase 5
+  landed early). `config/hypr/{bindings,input,monitors}.lua` are linked into
+  `~/.config/hypr/` (see `home.nix`), and the nix-store target is writable.
+  Do NOT edit them under `~/.config/hypr/` directly; edit the repo copy and
+  run `./rebuild.sh`.
+- After a `./rebuild.sh` swap, Hyprland does NOT auto-reload configs replaced
+  by symlinks. rebuild.sh now runs `hyprctl reload` (and prints any
+  `hyprctl configerrors`) at the end, so a rebuild is fully self-contained.
+  If editing hypr files directly (no rebuild), still run `hyprctl reload` and
+  check `hyprctl configerrors` yourself.
 - Do NOT add HM modules that generate hyprland-style desktop config; track
-  plain override files under `config/hypr/` instead when Phase 5 lands.
+  plain override files under `config/hypr/` instead.
 
 ## Patched kernel loop
 
