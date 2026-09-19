@@ -31,6 +31,7 @@ setup; do not evolve it. The migration story that led here is in
 | `config/bash/bashrc-personal` | Shell fragments sourced by `~/.bashrc`. |
 | `flake.nix` / `home.nix` | home-manager, user scope only (pending Phase 4.3 slim-down). |
 | `docs/macbookpro12-1-keyboard-*.md` | The full keyboard-fix saga: SPI DMA quirk, kernel patches, S3 resume, backlight. |
+| `docs/omarchy-4.0.4-upgrade-plan.md` | Planned upgrade to Omarchy 4.0.4 incl. porting the kernel patch stack onto `linux-omarchy`. Not yet executed. |
 
 ## Two apply surfaces
 
