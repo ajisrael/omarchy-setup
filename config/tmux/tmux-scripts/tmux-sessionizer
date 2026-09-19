@@ -6,7 +6,7 @@ source "$script_dir/tmux-sessionizer-lib.sh"
 # search for project directory
 selected=$(
 	{
-		find ~/learning/ ~/code/ -mindepth 1 -maxdepth 1 -type d
+		find ~/data-annotation/ ~/learning/ ~/code/ -mindepth 1 -maxdepth 1 -type d
 		printf '%s\n' ~/omarchy-setup
 	} | fzf
 )
