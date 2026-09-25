@@ -13,7 +13,8 @@
       "~/.config/nvim/**": "allow",
       "~/.config/omarchy/**": "allow",
       "~/.config/opencode/**": "allow",
-      "~/.pi/agent/**": "allow"
+      "~/.pi/agent/**": "allow",
+      "/sys/power/**": "allow"
     },
     "edit": {
       "*": "allow",
