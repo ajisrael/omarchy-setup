@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+
+# Toggles a "my-notes" pane layout for the current project: splits the
+# current pane vertically and opens the project's notes.md in nvim on the
+# right, with lazygit (rooted in ~/.todos) beneath it. Bound to <prefix>T in
+# tmux.conf.
+#
+# The project is the basename of the session's start path (tmux-sessionizer
+# starts sessions in the selected project dir), so a sessionizer session for
+# ~/code/dojo-pro maps to ~/.todos/notes/dojo-pro/notes.md.
+#
+# Mirrors tmux-my-todos' toggle/move semantics, tracked by the global
+# @my-notes-pane / @my-notes-git-pane options (pane ids survive join-pane):
+# - Not open anywhere -> create it next to the current pane in this session.
+# - Open in the current session -> close it (toggle off).
+# - Open in a different session -> move it into the current session instead
+#   of creating a second copy.
+
+set -euo pipefail
+
+note_opt="@my-notes-pane"
+git_opt="@my-notes-git-pane"
+
+todo_dir="$HOME/.todos"
+
+session="$(tmux display-message -p '#{session_name}')"
+pane="$(tmux display-message -p '#{pane_id}')"
+session_path="$(tmux display-message -p '#{session_path}')"
+
+if [[ -z "$session_path" || "$session_path" == "$HOME" ]]; then
+	project="$session"
+else
+	project="$(basename "$session_path")"
+fi
+
+notes_dir="$todo_dir/notes/$project"
+notes_file="$notes_dir/notes.md"
+
+pane_exists() {
+	[[ -n "$1" ]] && tmux list-panes -a -F '#{pane_id}' | grep -Fx "$1" >/dev/null
+}
+
+note_pane="$(tmux show-options -g -v "$note_opt" 2>/dev/null || true)"
+git_pane="$(tmux show-options -g -v "$git_opt" 2>/dev/null || true)"
+
+if pane_exists "$note_pane" && pane_exists "$git_pane"; then
+	note_session="$(tmux display-message -p -t "$note_pane" '#{session_name}')"
+
+	if [[ "$note_session" == "$session" ]]; then
+		tmux kill-pane -t "$git_pane"
+		tmux kill-pane -t "$note_pane"
+		tmux set-option -gu "$note_opt" 2>/dev/null || true
+		tmux set-option -gu "$git_opt" 2>/dev/null || true
+		exit 0
+	fi
+
+	tmux join-pane -h -s "$note_pane" -t "$pane"
+	tmux join-pane -s "$git_pane" -t "$note_pane"
+	tmux select-pane -t "$note_pane"
+	exit 0
+fi
+
+if pane_exists "$note_pane"; then tmux kill-pane -t "$note_pane"; fi
+if pane_exists "$git_pane"; then tmux kill-pane -t "$git_pane"; fi
+tmux set-option -gu "$note_opt" 2>/dev/null || true
+tmux set-option -gu "$git_opt" 2>/dev/null || true
+
+mkdir -p "$notes_dir"
+[[ -f "$notes_file" ]] || touch "$notes_file"
+
+note_pane="$(tmux split-window -h -P -F '#{pane_id}' -t "$pane" -c "$notes_dir")"
+git_pane="$(tmux split-window -v -P -F '#{pane_id}' -t "$note_pane" -c "$todo_dir")"
+
+tmux send-keys -t "$note_pane" "nvim notes.md" Enter
+tmux send-keys -t "$git_pane" "lazygit" Enter
+
+tmux set-option -g "$note_opt" "$note_pane"
+tmux set-option -g "$git_opt" "$git_pane"
+
+tmux select-pane -t "$note_pane"
