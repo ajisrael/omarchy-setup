@@ -1,0 +1,71 @@
+#!/bin/bash
+# Pure-logging suspend/resume instrumentation.
+#
+# Replaces the (now disabled) brcmfmac-reload hook on the system: this one
+# changes nothing about suspend behavior - it only makes the surrounding
+# kernel/PM activity observable so a failing cycle is easy to diagnose.
+#
+# Per cycle it writes two files under /var/log/suspend-debug/:
+#   cycle-<epoch>.pre.log   taken before suspend
+#   cycle-<epoch>.post.log  taken after resume
+# <epoch> is the pre-hook's UNIX time, so one cycle's two files pair up and
+# the pre/post of different cycles never collide. systemd runs these hooks
+# as root for both the plain suspend and suspend-then-hibernate paths.
+#
+# What it records:
+#   pre  - enables /sys/power/pm_print_times (the kernel then prints
+#          per-device suspend/resume timings into dmesg for THIS cycle),
+#          then snapshots lsmod and the kernel journal tail.
+#   post - the systemd-suspend.service result, lsmod, and the full kernel
+#          ring buffer plus a kernel journal tail (the ring buffer survives
+#          the sleep, so it holds the whole entry/resume path).
+#
+# The keyboard/trackpad are SPI on 00:15.4 (applespi + spi-pxa2xx); a dead
+# keyboard after wake shows up as `applespi: ... SPI transfer timed out` /
+# `Error reading from device: -110` and/or pxa2xx_spi resume errors, exactly
+# as documented in docs/macbookpro12-1-keyboard-s3-resume.md. WiFi recovery
+# would show brcmfmac reload lines. `maint/suspend-report` collates all of it
+# into one paste-ready block.
+set -u
+
+LOG_DIR="/var/log/suspend-debug"
+
+mkdir -p "$LOG_DIR" 2>/dev/null || exit 0
+
+case "${1:-}" in
+    pre)
+        # Kernel prints per-device suspend/resume timings this cycle.
+        echo 1 > /sys/power/pm_print_times 2>/dev/null || true
+        CYCLE=$(date +%s)
+        LOG="$LOG_DIR/cycle-$CYCLE.pre.log"
+        {
+            echo "===== $(date -Is) cycle=$CYCLE event=pre ====="
+            echo "uname: $(uname -r); mem_sleep: $(cat /sys/power/mem_sleep 2>/dev/null || echo n/a)"
+            echo "--- pm_print_times: $(cat /sys/power/pm_print_times 2>/dev/null || echo n/a)"
+            echo "--- driver state (input/wifi):"
+            lsmod | grep -E 'applespi|spi_pxa|brcmf|acpi_call' || true
+            echo "--- kernel journal tail (last 200 lines):"
+            journalctl -k -n 200 --no-pager
+        } > "$LOG" 2>&1
+        echo "$CYCLE" > "$LOG_DIR/.current-cycle"
+        ;;
+    post)
+        CYCLE=$(cat "$LOG_DIR/.current-cycle" 2>/dev/null || date +%s)
+        rm -f "$LOG_DIR/.current-cycle"
+        LOG="$LOG_DIR/cycle-$CYCLE.post.log"
+        {
+            echo "===== $(date -Is) cycle=$CYCLE event=post ====="
+            echo "uname: $(uname -r); mem_sleep: $(cat /sys/power/mem_sleep 2>/dev/null || echo n/a)"
+            echo "--- systemd-suspend.service:"
+            systemctl show systemd-suspend.service -p ActiveEnterTimestamp -p Result -p ExecMainStatus 2>/dev/null || true
+            echo "--- driver state (input/wifi):"
+            lsmod | grep -E 'applespi|spi_pxa|brcmf|acpi_call' || true
+            echo "--- dmesg (kernel ring, full - spans this boot incl. entry/resume):"
+            dmesg 2>/dev/null
+            echo "--- kernel journal tail (last 400 lines):"
+            journalctl -k -n 400 --no-pager
+        } > "$LOG" 2>&1
+        ;;
+esac
+
+exit 0

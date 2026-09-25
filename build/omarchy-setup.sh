@@ -25,10 +25,10 @@
 #       /etc/libinput/local-overrides.quirks (tags the SPI keyboard as
 #       internal so libinput's disable-while-typing actually fires)
 #   - config/actkbd/*                   -> F5/F6 keyboard-backlight stepping
-#   - config/systemd/system-sleep/brcmfmac-reload ->
-#       /usr/lib/systemd/system-sleep/ + maint/wifi-recover ->
-#       /usr/local/sbin/wifi-recover (reloads brcmfmac on resume to recover
-#       a hung BCM43602 Wi-Fi chip after suspend)
+#   - config/systemd/system-sleep/zz-suspend-debug ->
+#       /usr/lib/systemd/system-sleep/ (pure logging around suspend/resume).
+#       The brcmfmac auto-reload hook is NOT installed: suspension is stock,
+#       the WiFi hook was disabled via maint/disable-suspend-hooks.sh.
 #   - patched kernel packages           -> pacman -U from ~/build/linux/linux/
 #   - IgnorePkg hold in /etc/pacman.conf + the pre-refresh-pacman hook that
 #       re-adds it after `omarchy refresh pacman` rewrites pacman.conf
@@ -88,16 +88,11 @@ else
     sudo systemctl restart systemd-logind
 fi
 
-echo "==> system-sleep brcmfmac-reload hook"
-SLEEP_SRC="$DIR/config/systemd/system-sleep/brcmfmac-reload"
+echo "==> system-sleep zz-suspend-debug logging hook"
+SLEEP_SRC="$DIR/config/systemd/system-sleep/zz-suspend-debug"
 [ -e "$SLEEP_SRC" ] || { echo "missing $SLEEP_SRC" >&2; exit 1; }
 # No CHANGED bump: a system-sleep hook needs no initramfs/UKI rebuild.
-sudo install -Dm755 "$SLEEP_SRC" /usr/lib/systemd/system-sleep/brcmfmac-reload
-
-echo "==> wifi-recover (canonical BCM43602 recovery, used by the hook)"
-WIFI_RECOVER_SRC="$DIR/maint/wifi-recover"
-[ -e "$WIFI_RECOVER_SRC" ] || { echo "missing $WIFI_RECOVER_SRC" >&2; exit 1; }
-sudo install -Dm755 "$WIFI_RECOVER_SRC" /usr/local/sbin/wifi-recover
+sudo install -Dm755 "$SLEEP_SRC" /usr/lib/systemd/system-sleep/zz-suspend-debug
 
 echo "==> libinput quirks"
 quirk_src="$LIBINPUT_SRC/local-overrides.quirks"

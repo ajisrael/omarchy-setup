@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+# Collate the most recent suspend/resume cycle into one paste-ready block.
+# Run after waking the box (default: the latest cycle found in the journal).
+#
+# Prints:
+#   - system state (uname, mem_sleep, pm_print_times)
+#   - kernel PM entry/exit lines and the per-device suspend/resume timings
+#     emitted by pm_print_times
+#   - any SPI/applespi (-110, transfer timed out), brcmfmac, or device
+#     resume errors logged between entry and exit
+#   - the systemd-suspend.service result
+#   - the zz-suspend-debug hook's pre/post logs for the latest cycle
+#
+# Reading the output:
+#   - applespi `SPI transfer timed out` / `-110` / pxa2xx_spi resume errors
+#     -> the SPI S3 (LPSS private-register) path failed despite the kernel
+#     patch; see docs/macbookpro12-1-keyboard-s3-resume.md.
+#   - brcmfmac reload / wedge lines with no SPI errors -> the WiFi driver
+#     (the pre-existing BCM43602 wedge; its auto-reload hook is disabled).
+set -euo pipefail
+
+# Most recent PM entry/exit, in epoch seconds. Lines look like:
+#   <epoch> <host> kernel: PM: suspend entry (deep)
+ENTRY_LINE=$(journalctl -k --no-pager -o short-unix -g 'PM: suspend entry' 2>/dev/null | tail -1 || true)
+EXIT_LINE=$(journalctl -k --no-pager -o short-unix -g 'PM: suspend exit' 2>/dev/null | tail -1 || true)
+
+if [[ -z "$ENTRY_LINE" ]]; then
+    echo "No suspend cycle found in the journal yet."
+    echo "Run 'sudo systemctl suspend' (or maint/wifi-cycle-test) first."
+    exit 1
+fi
+
+ENTRY_TS=${ENTRY_LINE%% *}
+EXIT_TS=""
+[[ -n "$EXIT_LINE" ]] && EXIT_TS=${EXIT_LINE%% *}
+
+say() { printf '%s\n' "$*"; }
+
+say "==================== suspend cycle report ===================="
+say "uname:          $(uname -r)"
+say "mem_sleep:      $(cat /sys/power/mem_sleep 2>/dev/null || echo n/a)"
+say "pm_print_times: $(cat /sys/power/pm_print_times 2>/dev/null || echo n/a)"
+say "suspend entry:  $(date -d "@$ENTRY_TS" '+%F %H:%M:%S %Z' 2>/dev/null)  ($ENTRY_LINE)"
+if [[ -n "$EXIT_TS" ]]; then
+    say "suspend exit:   $(date -d "@$EXIT_TS" '+%F %H:%M:%S %Z' 2>/dev/null)  ($EXIT_LINE)"
+else
+    say "suspend exit:   (none yet - still suspended, exit never logged, or resume hung)"
+fi
+say ""
+
+say "--- kernel PM + device timings between entry and exit ---"
+SINCE_ARG="--since @$ENTRY_TS"
+[[ -n "$EXIT_TS" ]] && UNTIL_ARG="--until @$EXIT_TS" || UNTIL_ARG=""
+journalctl -k --no-pager $SINCE_ARG $UNTIL_ARG 2>/dev/null \
+    | grep -iE 'PM: |spi|applespi|brcmfmac|failed to suspend|timeout|d3|watchdog' \
+    | grep -viE 'usbcore|cfg80211|rfkill' \
+    | head -120 || true
+say ""
+
+say "--- systemd-suspend.service (last lines) ---"
+journalctl -u systemd-suspend.service --no-pager --since "@$ENTRY_TS" -n 15 2>/dev/null | tail -15 || true
+say ""
+
+say "--- zz-suspend-debug hook logs for the latest cycle ---"
+PRE_LOG=$(ls -1t /var/log/suspend-debug/cycle-*.pre.log 2>/dev/null | head -1 || true)
+if [[ -n "$PRE_LOG" ]]; then
+    POST_LOG="${PRE_LOG%.pre.log}.post.log"
+    say "pre : $PRE_LOG"
+    tail -60 "$PRE_LOG" 2>/dev/null | grep -vE '^[A-Z][a-z]{2} [ 0-9][0-9] ' || true
+    say ""
+    say "post: $POST_LOG"
+    if [[ -f "$POST_LOG" ]]; then
+        # dmesg makes this file large; show the notable lines plus the tail.
+        grep -iE 'applespi|spi_pxa|spi-|PM: |brcmfmac|timeout|failed' "$POST_LOG" 2>/dev/null | head -80 || true
+        say "... (tail) ..."
+        tail -15 "$POST_LOG"
+    else
+        say "  (missing - post hook did not run for this cycle)"
+    fi
+else
+    say "  (no zz-suspend-debug logs yet)"
+fi
+say ""
+
+say "How to read: applespi 'SPI transfer timed out' / error -110 -> SPI S3 path"
+say "failed despite the kernel patch. brcmfmac reload/wedge lines with no SPI"
+say "errors -> the WiFi driver (its auto-reload hook is now disabled)."
+say "================================================================"

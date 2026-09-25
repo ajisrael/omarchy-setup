@@ -1,19 +1,25 @@
 #!/usr/bin/env bash
-# Trigger the BCM43602 wedge reproducer: a real suspend/resume cycle through
-# systemd-sleep, then verify the wifi-recover fix handled it.
+# Trigger a real suspend/resume cycle through systemd-sleep, then report the
+# state of the box afterwards. Used to diagnose the keyboard/trackpad-die-
+# after-suspend issue and to watch for the BCM43602 WiFi wedge.
 #
 # The chip wedge is caused by the suspend -> resume path itself
 # (brcmf_pcie_pm_enter_D3, brcmf_msgbuf/timeout on resume) - how long the box
-# stays asleep is irrelevant. So a SHORT suspend reproduces the failure mode
-# that used to take "close the lid for an hour" to hit, and with the fix in
-# place the resume should come back healthy or be recovered by the hook.
+# stays asleep is irrelevant. So a SHORT suspend reproduces what used to take
+# "close the lid for an hour" to hit. The auto-reload hook (brcmfmac-reload /
+# wifi-recover) is DISABLED as of maint/disable-suspend-hooks.sh, so nothing
+# touches the driver mid-cycle: this makes a clean isolation test.
 #
 # This goes through `systemctl suspend` (not `rtcwake -m mem`, which writes
 # /sys/power/state directly and skips the systemd-sleep hooks), so the
-# brcmfmac-reload hook runs exactly as on a real lid close. An RTC alarm set
-# with `rtcwake -m no` wakes the box after the chosen duration. If the RTC
-# alarm does not wake it, any normal wake (open the lid / press power) works;
-# the verification then picks up at this boot's journal.
+# zz-suspend-debug logging hook runs exactly as on a real lid close. An RTC
+# alarm set with `rtcwake -m no` wakes the box after the chosen duration. If
+# the RTC alarm does not wake it, any normal wake (open the lid / press power)
+# works; the verification then picks up at this boot's journal.
+#
+# The keyboard/trackpad check is manual: type and move the trackpad after the
+# wake. maint/suspend-report then shows whether the SPI controller (applespi/
+# spi-pxa2xx) or the WiFi driver was the thing that broke.
 #
 # Usage:
 #   maint/wifi-cycle-test            # suspend 30s + verify
@@ -22,7 +28,6 @@ set -euo pipefail
 
 DURATION="${1:-30}"
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
-WIFI_CHK="$DIR/maint/wifi-recover"
 
 echo "==> Setting an RTC wake alarm in ${DURATION}s and suspending (systemd-sleep hooks will run)..."
 sudo rtcwake -m no -s "$DURATION"
@@ -32,22 +37,48 @@ echo "==> Back from suspend; letting NetworkManager settle."
 sleep 5
 
 echo
-echo "--- wifi-recover hook output from this boot's journal ---"
+echo "--- zz-suspend-debug hook / payload output from this boot's journal ---"
 HITS=$(journalctl -b --no-pager -o cat -g \
-    'wifi-recover|Re-initializing|Driver reloaded|PCI rescan|Carrier still not answering' 2>/dev/null)
+    'suspend entry|suspend exit|Re-initializing|Driver reloaded|PCI rescan|Carrier still not answering|brcmfmac_wcc' 2>/dev/null)
 if [[ -n "$HITS" ]]; then
     echo "$HITS"
 else
-    echo "  (none found - the hook may not have run)"
+    echo "  (none found)"
 fi
 
 echo
-echo "--- current Wi-Fi health ---"
-if "$WIFI_CHK" --check; then
-    echo
-    echo "PASS: Wi-Fi is healthy after this resume."
+echo "--- current Wi-Fi health (basic probe; no recovery hook installed) ---"
+IFACE=""
+for iface in /sys/class/net/wl*; do
+    [ -e "$iface" ] && IFACE="$(basename "$iface")" && break
+done
+DIAG=""
+if [[ -n "$IFACE" ]] && iw dev "$IFACE" link 2>/dev/null | grep -q "Connected to"; then
+    if iw dev "$IFACE" station dump >/dev/null 2>&1; then
+        DIAG="PASS: $IFACE answers a firmware station-dump round-trip."
+    else
+        DIAG="DEGRADED: $IFACE up but firmware does not answer a station dump (wedge)."
+    fi
+elif [[ -n "$IFACE" ]]; then
+    if timeout 20 sudo iw dev "$IFACE" scan >/dev/null 2>&1; then
+        DIAG="PASS: $IFACE answers a firmware scan round-trip."
+    else
+        DIAG="DEGRADED: $IFACE present but firmware does not answer a scan (wedge)."
+    fi
 else
-    echo
-    echo "REGRESSION: Wi-Fi degraded after this resume - hook did not recover it."
-    exit 1
+    DIAG="NO INTERFACE: no wl* interface registered after this resume."
 fi
+echo "  $DIAG"
+
+echo
+case "$DIAG" in
+    PASS:*)
+        echo "Wi-Fi healthy after this resume."
+        ;;
+    *)
+        echo "NOTE: suspend hooks are stock (WiFi auto-reload disabled) - the BCM43602"
+        echo "wedge may recur. Run maint/suspend-report for the full cycle; manual WiFi"
+        echo "recovery is still available via the repo copy maint/wifi-recover."
+        exit 1
+        ;;
+esac

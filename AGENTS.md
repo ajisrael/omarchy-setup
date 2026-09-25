@@ -142,10 +142,26 @@ HM stays user-scope only and must not expand into desktop-config territory:
 
 `maint/bt-recover` and `maint/wifi-recover` are manual one-shot recovery
 helpers (mirror-style CLIs: no args = recover-if-degraded, `--check` probes,
-`--force` ignores health). wifi-recover is ALSO the canonical recovery used
-around every suspend/resume via `config/systemd/system-sleep/brcmfmac-reload`
-(installed to `/usr/local/sbin/wifi-recover` by omarchy-setup.sh); edit it in
-the repo, not in place.
+`--force` ignores health). The wifi-recover AUTO-hook is DISABLED: suspension
+is back to stock (see "Suspend debugging" below). `maint/wifi-cycle-test`
+reproduces a suspend/resume cycle and does a basic Wi-Fi health probe (no
+firmware-recovery dependency); manual WiFi recovery lives in the repo copy of
+`maint/wifi-recover`.
+
+## Suspend debugging (keyboard/trackpad die after wake)
+
+The keyboard/trackpad after deep sleep is the documented SPI bug
+(docs/macbookpro12-1-keyboard-s3-resume.md) fixed by the patched kernel
+(`0002-spi-pxa2xx-lpss-s3-resume.patch`). As of 2026-09 the repo's brcmfmac
+auto-reload hook (`brcmfmac-reload` + `/usr/local/sbin/wifi-recover`) is
+removed: `maint/disable-suspend-hooks.sh` backs up and removes both and
+installs the pure-logging `config/systemd/system-sleep/zz-suspend-debug` hook
+in their place (runs as root via systemd; sets `pm_print_times` and snapshots
+dmesg/journal/lsmod to `/var/log/suspend-debug/`). Use `maint/suspend-report`
+after a wake for a paste-ready timeline. Reading it: applespi `SPI transfer
+timed out`/`-110` = SPI S3 path failed despite the patch; brcmfmac reload/wedge
+lines with no SPI errors = the WiFi wedge. Do not re-add the wifi auto-hook
+without re-arming the diagnostic loop first.
 
 Wi-Fi wedge after suspend: BCM43602 firmware stops answering and every
 cfg80211 call returns -5 (EIO) while the interface stays UP and rfkill stays
