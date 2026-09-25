@@ -1,21 +1,42 @@
 #!/bin/bash
-# Reload the brcmfmac module after resume to recover from a hung BCM43602
-# Wi-Fi chip (MacBookPro12,1). On some suspend/resume cycles the chip
-# firmware stalls and stops answering the driver (brcmf_msgbuf_query_dcmd:
-# Timeout on response - err -5), leaving the radio unable to scan/associate:
-# no networks listed, just the still-functional NM/Quickshell menu.
-# Reloading the module forces a PCIe reset of the card and restores Wi-Fi.
+# Reload the brcmfmac driver around suspend/resume to recover from a hung
+# BCM43602 Wi-Fi chip (MacBookPro12,1). Some suspend/resume cycles leave the
+# firmware unresponsive (brcmf_msgbuf_query_dcmd: Timeout on response - err
+# -5) even though the interface stays UP; the radio is dead behind a live
+# interface, so rfkill toggles and the shell's Wi-Fi module cannot help.
+#
+# This wraps maint/wifi-recover (installed as /usr/local/sbin/wifi-recover by
+# build/omarchy-setup.sh) - the single canonical recovery implementation. An
+# earlier inline version ran `modprobe -r brcmfmac` alone, which ALWAYS fails:
+# brcmfmac_wcc holds a reference on brcmfmac and blocks the removal, so the
+# hook never actually recovered anything.
+#
+# Reload policy (see maint/wifi-recover for the full rationale):
+#   pre  - BEFORE suspend: probe WITHOUT scanning (NM has already disconnected
+#          the interface by hook time, and a full-channel scan right before
+#          D3 is the prime suspect for the two observed long-sleep resume
+#          hangs); reload only if degraded-and-associated, so a stale wedge
+#          can't block suspend entry (D3 substate entry times out).
+#          Unassociated = "can't tell" = let the suspend proceed.
+#   post - AFTER resume: reload UNCONDITIONALLY. A probe at resume time is
+#          unreliable - the wedge can develop right after it passes (the chip
+#          answered a probe at 20:50:07 and died at 20:50:09 under
+#          NetworkManager's reconnect load), and `iw link` lies when the
+#          interface is wedged-but-disconnected. Unconditional reload is what
+#          the pre-fix inline hook meant to do all along.
 
-if [[ $1 != "post" ]]; then
-  exit 0
-fi
-
-# Only bother on the Broadcom BCM43602 (14e4:43ba) this hook targets.
+# Only bother on the Broadcom BCM43602 (14e4:43ba) this targets.
 if ! lspci -n -d 14e4:43ba 2>/dev/null | grep -q .; then
-  exit 0
+    exit 0
 fi
 
-[ -d /sys/module/brcmfmac ] || exit 0
+case "$1" in
+    pre)
+        /usr/local/sbin/wifi-recover --pre-suspend
+        ;;
+    post)
+        /usr/local/sbin/wifi-recover --resume
+        ;;
+esac
 
-modprobe -r brcmfmac 2>/dev/null
-modprobe brcmfmac 2>/dev/null
+exit 0

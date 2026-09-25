@@ -1,0 +1,264 @@
+#!/usr/bin/env bash
+# Recover an unresponsive BCM43602 Wi-Fi chip (14e4:43ba / wlp3s0 in the
+# MacBookPro12,1) after suspend/resume.
+#
+# Failure mode: on some suspend/resume cycles the firmware stalls and stops
+# answering the driver ("brcmf_msgbuf_query_dcmd: Timeout on response",
+# "brcmf_pcie_pm_enter_D3: Timeout"), and every subsequent cfg80211 call
+# returns -5 (EIO) while the msgbuf ring stays exhausted (-12). The interface
+# stays UP and rfkill stays unblocked, so the shell's Wi-Fi module shows an
+# empty network list in BOTH on/off states and its rfkill toggle does nothing.
+# A stale wedge ALSO blocks suspend entry itself (D3 substate entry times out
+# -> "PM: Some devices failed to suspend"), so the machine cannot sleep again
+# until the driver is reloaded or the box is rebooted.
+#
+# Fix: reload the brcmfmac driver. NOTE the unload order - brcmfmac_wcc holds
+# a reference on brcmfmac, so "modprobe -r brcmfmac" alone is ALWAYS refused
+# (this silently defeated the earlier system-sleep hook). brcmfmac_wcc must
+# come out first. If the driver is too stuck to unload, fall back to a PCI
+# remove + rescan, which forces a fresh probe of the card.
+#
+# Why reload UNCONDITIONALLY on resume (--resume) instead of probing first:
+# probing at resume time is unreliable, and we learned it the hard way -
+# `iw dev link` returns exit 0 with "Not connected." on a wedged-but-
+# disconnected interface WITHOUT making any firmware call, and the firmware
+# can also die a moment after the probe (observed: probe OK at 20:50:07,
+# chip wedged at 20:50:09 under NetworkManager's reconnect load). So the post
+# hook reloads unconditionally - exactly what the original inline hook meant
+# to do. The only probing left is the firmware round-trip guard in
+# --pre-suspend (and --check), which uses a scan or station query that the
+# wedged firmware fails, and which stops a stale wedge from ever blocking a
+# suspend again.
+#
+# Run as your normal user (the modprobe/sysfs steps self-sudo). Healthy
+# systems are a no-op; --force re-inits anyway, --check probes without
+# touching anything, --pre-suspend reloads only if degraded (system-sleep pre
+# hook), --resume reloads unconditionally (system-sleep post hook).
+#
+# Pre-suspend probing policy (why --pre-suspend does NOT scan): both observed
+# long-sleep resume hangs (2026-09-21 and 2026-09-23, deep sleep, lid closed
+# for hours) show the pre-suspend probe's full-channel scan finishing ~3s
+# before "PM: suspend entry", with no resume logged at all - the box hung in
+# the resume path before any post hook could run. NM has always disconnected
+# the interface by the time the pre hook runs, so the old probe ALWAYS fell
+# into the scan branch and hammered the BCM43602 firmware with a full scan
+# right before D3. The pre-suspend probe now only round-trips when associated
+# (station dump); unassociated means skip - the post-resume hook reloads
+# unconditionally, so a chip entering suspend was freshly re-initialized at
+# the last wake anyway. Scans remain fine in wait_recovered (chip is fresh
+# after a reload) and in the manual/--check paths (no suspend imminent).
+set -euo pipefail
+
+WIFI_VID="14e4"
+WIFI_PID="43ba"
+WAIT_TRIES=15
+WAIT_STEP=1
+SCAN_TIMEOUT=20
+MODPROBE_TIMEOUT=30
+
+FORCE=0
+CHECK_ONLY=0
+RESUME_MODE=0
+PRE_MODE=0
+for arg in "$@"; do
+    case "$arg" in
+        --force)       FORCE=1 ;;
+        --check)       CHECK_ONLY=1 ;;
+        --resume)      RESUME_MODE=1 ;;
+        --pre-suspend) PRE_MODE=1 ;;
+    esac
+done
+
+pci_device() {
+    for dev in /sys/bus/pci/devices/*/; do
+        [ -r "$dev/vendor" ] || continue
+        vid=$(cat "$dev/vendor")
+        pid=$(cat "$dev/device")
+        if [[ "$vid" == "0x$WIFI_VID" && "$pid" == "0x$WIFI_PID" ]]; then
+            echo "$dev"
+            return 0
+        fi
+    done
+    return 1
+}
+
+brcm_ifaces() {
+    # Interfaces bound to the brcmfmac driver, current name whatever udev gave
+    # them (wlp3s0 today, could be wlan0 after a re-probe).
+    local dev
+    for iface in /sys/class/net/*/; do
+        [ -e "$iface/device" ] || continue
+        dev=$(readlink -f "$iface/device/driver" 2>/dev/null || true)
+        [[ "$dev" == */drivers/brcmfmac ]] && echo "$(basename "$iface")"
+    done
+}
+
+rfkill_blocked() {
+    rfkill list wifi 2>/dev/null | grep -q "blocked: yes"
+}
+
+# True firmware round-trip probe. `iw dev link` is NOT enough: on a
+# wedged-but-unassociated interface it prints "Not connected." and exits 0
+# without calling into the firmware, so it can never detect the wedge. Using
+# station dump (associated) or a scan (unassociated - needs root) forces a
+# real brcmf dcmd that the dead firmware fails with -5/-12.
+#
+# The scan branch is NOT used for --pre-suspend (mode passed via SCAN_OK_IN_
+# PRE): a full-channel scan right before D3 is the prime suspect for the
+# observed long-sleep resume hangs. See the pre-suspend policy note above.
+firmware_answers() {
+    local iface="$1"
+    local rc
+    if iw dev "$iface" link 2>/dev/null | grep -q "Connected to"; then
+        iw dev "$iface" station dump >/dev/null 2>&1
+        return $?
+    fi
+    if [[ "${SCAN_OK_IN_PRE:-1}" == "0" ]]; then
+        # Unassociated and scans are off (pre-suspend): no round-trip possible,
+        # report "can't tell" so the caller decides (pre-suspend skips the
+        # reload; wait_recovered keeps retrying).
+        return 99
+    fi
+    timeout "$SCAN_TIMEOUT" sudo iw dev "$iface" scan >/dev/null 2>&1
+    rc=$?
+    # 16 = EBUSY (a scan is already running, e.g. NetworkManager's) - firmware
+    # is alive, just busy.
+    [[ $rc -eq 0 || $rc -eq 16 ]]
+}
+
+wait_recovered() {
+    local iface
+    for _ in $(seq 1 "$WAIT_TRIES"); do
+        iface=$(brcm_ifaces | head -1)
+        if [[ -n "$iface" ]] && firmware_answers "$iface"; then
+            echo "$iface"
+            return 0
+        fi
+        sleep "$WAIT_STEP"
+    done
+    return 1
+}
+
+health_status() {
+    local iface
+    iface=$(brcm_ifaces | head -1)
+    if [[ -z "$iface" ]]; then
+        echo "degraded (no brcmfmac interface registered)"
+        return 1
+    fi
+    if rfkill_blocked; then
+        echo "blocked (rfkill soft/hard block present - try 'rfkill unblock wifi')"
+        return 1
+    fi
+    if firmware_answers "$iface"; then
+        echo "healthy"
+        return 0
+    fi
+    # rc 99 = "can't tell" (unassociated + scans disabled): not a health
+    # verdict - surface it as its own state so callers can decide.
+    if [[ $? -eq 99 ]]; then
+        echo "unknown (unassociated, firmware round-trip unavailable)"
+        return 99
+    fi
+    echo "degraded (interface up but firmware unresponsive - scan/station round-trip fails)"
+    return 1
+}
+
+recover() {
+    local dev
+    echo "Re-initializing the BCM43602 driver..."
+    # Unload the helper first: brcmfmac_wcc pins brcmfmac and would otherwise
+    # make the removal fail silently. Each step is non-fatal - if the driver is
+    # too wedged to unload (dcmd queries can stall removal), the PCI remove +
+    # rescan below is the backstop.
+    timeout "$MODPROBE_TIMEOUT" sudo modprobe -r brcmfmac_wcc 2>/dev/null || true
+    timeout "$MODPROBE_TIMEOUT" sudo modprobe -r brcmfmac 2>/dev/null || true
+    # brcmfmac_wcc depends on brcmfmac, so this pulls the core back in too.
+    sudo modprobe brcmfmac_wcc 2>/dev/null || sudo modprobe brcmfmac 2>/dev/null || true
+
+    if iface=$(wait_recovered); then
+        echo "Driver reloaded; interface $iface is answering again."
+        return 0
+    fi
+
+    # Still stuck (driver too wedged to unload cleanly): force a fresh probe
+    # by yanking the device off the PCI bus and rescanning.
+    dev=$(pci_device) || {
+        echo "No $WIFI_VID:$WIFI_PID device on the PCI bus - nothing to recover." >&2
+        return 1
+    }
+    echo "Module reload did not clear the wedge; PCI remove + rescan..."
+    sudo sh -c "echo 1 > ${dev}remove"
+    sudo sh -c "echo 1 > /sys/bus/pci/rescan"
+
+    if iface=$(wait_recovered); then
+        echo "PCI rescan recovered it; interface $iface is answering again."
+        return 0
+    fi
+    echo "Carrier still not answering after rescan; try a reboot." >&2
+    return 1
+}
+
+# --check: report health without touching anything.
+if [[ "$CHECK_ONLY" -eq 1 ]]; then
+    RC=0
+    STATUS=$(health_status) || RC=$?
+    echo "Wi-Fi health: $STATUS"
+    [[ "$RC" -eq 0 ]] && exit 0 || exit 1
+fi
+
+# --pre-suspend: reload only if degraded, so a stale wedge cannot block the
+# suspend (D3 entry would time out). Silent when healthy. A rfkill BLOCKED
+# chip is not a wedge - it suspends fine - so leave the user's wifi toggle
+# alone and just let the suspend proceed.
+#
+# Probing is restricted to the associated state: NM disconnects wlp3s0 before
+# the pre hook runs, so a scan-based probe here would fire a full-channel scan
+# seconds before D3 - the prime suspect for the observed long-sleep resume
+# hangs. An unassociated interface is "can't tell" (rc 99): treated as healthy
+# on the way DOWN. The post-resume hook reloads unconditionally, so a chip
+# entering suspend was freshly re-initialized at the last wake anyway; the
+# only wedge this could miss is one that develops mid-suspend, which no
+# pre-probe can catch and which the post hook handles on the way up.
+if [[ "$PRE_MODE" -eq 1 ]]; then
+    export SCAN_OK_IN_PRE=0
+    RC=0
+    STATUS=$(health_status) || RC=$?
+    # healthy (0), "can't tell" (99), or rfkill-blocked (not a wedge) ->
+    # let the suspend proceed untouched.
+    if [[ "$RC" -eq 0 || "$RC" -eq 99 || "$STATUS" == "blocked" ]]; then
+        exit 0
+    fi
+    recover
+    exit $?
+fi
+
+# --resume: reload unconditionally. The probe cannot be trusted here - the
+# wedge can develop AFTER the check (chip answered at resume, died 2s later
+# under NM reconnect), so a conditional path would keep silencing a real
+# wedge. RELOAD is armed no matter what the current health says.
+if [[ "$RESUME_MODE" -eq 1 || "$FORCE" -eq 1 ]]; then
+    recover
+    exit $?
+fi
+
+# Default (manual): probe, recover only if degraded.
+RC=0
+STATUS=$(health_status) || RC=$?
+if [[ "$RC" -eq 0 ]]; then
+    echo "Wi-Fi controller healthy (driver answers a firmware round-trip, rfkill unblocked)."
+    exit 0
+fi
+if [[ "$STATUS" == "blocked" ]]; then
+    echo "rfkill reports the radio blocked; unblocking and re-checking..."
+    sudo rfkill unblock wifi
+    RC=0
+    STATUS=$(health_status) || RC=$?
+    if [[ "$RC" -eq 0 ]]; then
+        echo "Wi-Fi unblocked and answering."
+        exit 0
+    fi
+    echo "Still $STATUS after unblocking; proceeding with driver recovery." >&2
+fi
+
+recover

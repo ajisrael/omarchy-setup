@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# Trigger the BCM43602 wedge reproducer: a real suspend/resume cycle through
+# systemd-sleep, then verify the wifi-recover fix handled it.
+#
+# The chip wedge is caused by the suspend -> resume path itself
+# (brcmf_pcie_pm_enter_D3, brcmf_msgbuf/timeout on resume) - how long the box
+# stays asleep is irrelevant. So a SHORT suspend reproduces the failure mode
+# that used to take "close the lid for an hour" to hit, and with the fix in
+# place the resume should come back healthy or be recovered by the hook.
+#
+# This goes through `systemctl suspend` (not `rtcwake -m mem`, which writes
+# /sys/power/state directly and skips the systemd-sleep hooks), so the
+# brcmfmac-reload hook runs exactly as on a real lid close. An RTC alarm set
+# with `rtcwake -m no` wakes the box after the chosen duration. If the RTC
+# alarm does not wake it, any normal wake (open the lid / press power) works;
+# the verification then picks up at this boot's journal.
+#
+# Usage:
+#   maint/wifi-cycle-test            # suspend 30s + verify
+#   maint/wifi-cycle-test 90         # custom duration in seconds
+set -euo pipefail
+
+DURATION="${1:-30}"
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+WIFI_CHK="$DIR/maint/wifi-recover"
+
+echo "==> Setting an RTC wake alarm in ${DURATION}s and suspending (systemd-sleep hooks will run)..."
+sudo rtcwake -m no -s "$DURATION"
+sudo systemctl suspend
+
+echo "==> Back from suspend; letting NetworkManager settle."
+sleep 5
+
+echo
+echo "--- wifi-recover hook output from this boot's journal ---"
+HITS=$(journalctl -b --no-pager -o cat -g \
+    'wifi-recover|Re-initializing|Driver reloaded|PCI rescan|Carrier still not answering' 2>/dev/null)
+if [[ -n "$HITS" ]]; then
+    echo "$HITS"
+else
+    echo "  (none found - the hook may not have run)"
+fi
+
+echo
+echo "--- current Wi-Fi health ---"
+if "$WIFI_CHK" --check; then
+    echo
+    echo "PASS: Wi-Fi is healthy after this resume."
+else
+    echo
+    echo "REGRESSION: Wi-Fi degraded after this resume - hook did not recover it."
+    exit 1
+fi

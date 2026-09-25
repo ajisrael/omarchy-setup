@@ -65,6 +65,27 @@ after Phase 4.3 the repo copy is authoritative via symlink.
 
 HM stays user-scope only and must not expand into desktop-config territory:
 
+- Agent attention toasts (config/opencode/plugins/omarchy-notify.ts, HM-linked
+  into ~/.config/opencode/plugins/) fire Omarchy notification-daemon toasts
+  via omarchy-notification-send when a session needs the user (permission,
+  question, error, idle-after-work). Each toast carries an omarchy-exec hint
+  -> config/bin/omarchy-notification-jump (HM-linked to ~/.local/bin/), which
+  on click switches the attached tmux client to the notifying window, makes
+  its pane active, and raises the foot window (found by walking the tmux
+  client's ppid ancestry against hyprctl clients). Load-bearing details: the
+  exec command is resolved at TOAST TIME (socket + TMUX_PANE from the
+  opencode process env) because click time runs from the shell process with
+  no tmux env; a libnotify "default" action would instead keep opencode
+  blocked on the toast and die unanswered on shell restart. Omarchy popups
+  render no inline buttons (only one click action), so permission toasts
+  click through to config/bin/omarchy-permission-menu: Omarchy's option menu
+  with Accept/Reject POSTing `{"response":"once"|"reject"}` to the opencode
+  server the plugin bakes into the exec (serverUrl is a PluginInput field)
+  and "Jump to window" falling through to the jump script. Suppression:
+  paneIsVisible() compares the pane's session:window against every attached
+  client's current view, so toasts only fire when the user is NOT looking at
+  that window. Restart opencode to pick up plugin edits.
+
 - HM owns: `.bashrc` (composed over omarchy's env-bootstrap + rc),
   `.ssh/config`, `.config/git/ignore`, `.config/tmux/tmux.conf`,
   opencode JSONs, agent skills (config/skills/, linked into
@@ -116,6 +137,44 @@ HM stays user-scope only and must not expand into desktop-config territory:
   check `hyprctl configerrors` yourself.
 - Do NOT add HM modules that generate hyprland-style desktop config; track
   plain override files under `config/hypr/` instead.
+
+## Radio recovery scripts (maint/)
+
+`maint/bt-recover` and `maint/wifi-recover` are manual one-shot recovery
+helpers (mirror-style CLIs: no args = recover-if-degraded, `--check` probes,
+`--force` ignores health). wifi-recover is ALSO the canonical recovery used
+around every suspend/resume via `config/systemd/system-sleep/brcmfmac-reload`
+(installed to `/usr/local/sbin/wifi-recover` by omarchy-setup.sh); edit it in
+the repo, not in place.
+
+Wi-Fi wedge after suspend: BCM43602 firmware stops answering and every
+cfg80211 call returns -5 (EIO) while the interface stays UP and rfkill stays
+unblocked, so the shell wifi module shows an empty list in both states. The
+blast radius of the fix is a driver reload. LOAD-BEARING ORDER: `brcmfmac_wcc`
+holds a reference on `brcmfmac`, so `modprobe -r brcmfmac` alone ALWAYS
+fails silently - unload `brcmfmac_wcc` first, then `brcmfmac`, then
+`modprobe brcmfmac_wcc` (pulls the core back in). Never "simplify" an inline
+`modprobe -r brcmfmac` back into a hook; that was the original bug.
+
+PROBING AT RESUME CANNOT WORK - do not reintroduce it as an "optimization".
+Two independent failure modes were observed with the old probe-based hook:
+(i) `iw dev link` returns exit 0 with "Not connected." on a wedged-but-
+disconnected interface without any firmware round-trip, so it reports
+"healthy" while the chip is dead; (ii) the firmware can die AFTER the probe
+passes (chip answered at 20:50:07, wedged at 20:50:09 under NetworkManager's
+reconnect load). So the post-resume hook reloads UNCONDITIONALLY (the
+original inline hook's true intent), and a stale wedge is additionally caught
+pre-suspend (`--pre-suspend`: probe with a real firmware round-trip - station
+dump when associated, sudo scan otherwise - and reload only if degraded),
+because a wedged chip BLOCKS suspend entry: `brcmf_pcie_pm_enter_D3` times
+out and `PM: Some devices failed to suspend` aborts the sleep.
+
+`maint/wifi-cycle-test` reproduces the wedge in seconds without a long lid
+close: it arms an RTC alarm (`rtcwake -m no`), `systemctl suspend`s (so the
+real systemd-sleep hooks run - NOT `rtcwake -m mem`, which bypasses them),
+then greps the journal for hook output and checks health. A wedge can make
+the machine fail to suspend at all, which also makes the D3-timeout symptom
+directly observable from this script.
 
 ## Patched kernel loop
 

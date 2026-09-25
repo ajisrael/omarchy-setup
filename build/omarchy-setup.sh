@@ -26,7 +26,8 @@
 #       internal so libinput's disable-while-typing actually fires)
 #   - config/actkbd/*                   -> F5/F6 keyboard-backlight stepping
 #   - config/systemd/system-sleep/brcmfmac-reload ->
-#       /usr/lib/systemd/system-sleep/ (reloads brcmfmac on resume to recover
+#       /usr/lib/systemd/system-sleep/ + maint/wifi-recover ->
+#       /usr/local/sbin/wifi-recover (reloads brcmfmac on resume to recover
 #       a hung BCM43602 Wi-Fi chip after suspend)
 #   - patched kernel packages           -> pacman -U from ~/build/linux/linux/
 #   - IgnorePkg hold in /etc/pacman.conf + the pre-refresh-pacman hook that
@@ -92,6 +93,11 @@ SLEEP_SRC="$DIR/config/systemd/system-sleep/brcmfmac-reload"
 [ -e "$SLEEP_SRC" ] || { echo "missing $SLEEP_SRC" >&2; exit 1; }
 # No CHANGED bump: a system-sleep hook needs no initramfs/UKI rebuild.
 sudo install -Dm755 "$SLEEP_SRC" /usr/lib/systemd/system-sleep/brcmfmac-reload
+
+echo "==> wifi-recover (canonical BCM43602 recovery, used by the hook)"
+WIFI_RECOVER_SRC="$DIR/maint/wifi-recover"
+[ -e "$WIFI_RECOVER_SRC" ] || { echo "missing $WIFI_RECOVER_SRC" >&2; exit 1; }
+sudo install -Dm755 "$WIFI_RECOVER_SRC" /usr/local/sbin/wifi-recover
 
 echo "==> libinput quirks"
 quirk_src="$LIBINPUT_SRC/local-overrides.quirks"
