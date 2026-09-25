@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+# omarchy:summary=Focus the tmux window behind an opencode attention toast
+# omarchy:args=[--socket <path>] (--pane <pane-id> | --terminal)
+# Click handler for opencode attention toasts. Omarchy's notification daemon
+# runs this detached when the toast is clicked (via the omarchy-exec hint the
+# opencode-notify plugin bakes into each toast). It has no tmux env, so the
+# caller passes the server socket and the pane id captured at toast time.
+#
+# Sequences: pick an attached client (one already viewing the session, else
+# the first), switch it to the notifying window (even across session
+# boundaries), make the notifying pane the window's active pane, then raise
+# the terminal by walking the tmux client's ancestry to the foot process.
+
+set -euo pipefail
+
+socket=""
+pane=""
+terminal_only=""
+
+while (($#)); do
+  case $1 in
+  --socket) [[ ${2-} ]] || break; socket=$2; shift 2 ;;
+  --pane) [[ ${2-} ]] || break; pane=$2; shift 2 ;;
+  --terminal) terminal_only=1; shift ;;
+  *) shift ;;
+  esac
+done
+
+tmux_cmd=(tmux)
+if [[ "$socket" != "" ]]; then
+  tmux_cmd=("${tmux_cmd[@]}" -S "$socket")
+fi
+
+# hyprctl may briefly refuse during a shell restart; a click handler should
+# degrade to a no-op rather than error, hence the || true discipline below.
+
+focus_window_by_pid() {
+  local want=$1 addr
+  addr=$(hyprctl -j clients 2>/dev/null | jq -r --argjson pid "$want" \
+    'first(.[] | select(.pid == $pid) | .address)' || true)
+  if [[ "$addr" != "" && "$addr" != "null" ]]; then
+    hyprctl dispatch focuswindow "address:$addr" 2>/dev/null || true
+    return 0
+  fi
+  return 1
+}
+
+# Walk the tmux client process's ancestors until one is a live Hyprland
+# window - that is the terminal (foot) actually displaying this client,
+# regardless of what other tmux clients exist.
+focus_client_terminal() {
+  local p=$1
+  for _ in $(seq 20); do
+    ((p > 1)) || return 1
+    if focus_window_by_pid "$p"; then return 0; fi
+    p=$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ' || true)
+    [[ -n "$p" ]] || return 1
+  done
+  return 1
+}
+
+# No pane to jump to (opencode ran bare, outside tmux): just raise a
+# terminal window. Rough target; any foot window does.
+if [[ "$terminal_only" == "1" || "$pane" == "" ]]; then
+  /usr/share/omarchy/bin/omarchy-hyprland-focus-app foot || true
+  exit 0
+fi
+
+client_info=$("${tmux_cmd[@]}" list-clients -F '#{client_tty}|#{client_session}|#{client_pid}' 2>/dev/null || true)
+if [[ "$client_info" == "" ]]; then
+  # Nothing attached: re-attach in a fresh terminal so the click still gets
+  # the user somewhere useful.
+  (xdg-terminal-exec tmux attach || /usr/share/omarchy/bin/omarchy-hyprland-focus-app foot) || true
+  exit 0
+fi
+
+# The pane's session + window index, resolved now (click time): the window
+# may have moved since the toast was sent.
+if ! view=$("${tmux_cmd[@]}" display-message -p -t "$pane" '#{session_name}|#{window_index}' 2>/dev/null); then
+  # Session/pane is gone (dead session, server restart): best effort attach.
+  (xdg-terminal-exec tmux attach || true)
+  exit 0
+fi
+target_session=${view%%|*}
+target_window=${view##*|}
+
+# Prefer a client already looking at the target session; otherwise the first
+# attached client gets switched over. The pane id stays valid as the
+# select-pane target afterwards, even if indexes shifted.
+chosen_tty=""
+chosen_pid=""
+while IFS= read -r line; do
+  IFS='|' read -r tty c_sess c_pid <<<"$line"
+  if [[ "$c_sess" == "$target_session" ]]; then
+    chosen_tty=$tty
+    chosen_pid=$c_pid
+    break
+  fi
+  if [[ -z "$chosen_tty" ]]; then
+    chosen_tty=$tty
+    chosen_pid=$c_pid
+  fi
+done <<<"$client_info"
+
+if [[ -n "$chosen_tty" ]]; then
+  "${tmux_cmd[@]}" switch-client -c "$chosen_tty" -t "$target_session:$target_window" 2>/dev/null || true
+fi
+# Then the cursor sits with the notifying opencode when other panes share
+# the window, and the terminal window displaying that client is raised even
+# from wherever the user left it.
+"${tmux_cmd[@]}" select-pane -t "$pane" 2>/dev/null || true
+
+if ! focus_client_terminal "$chosen_pid"; then
+  /usr/share/omarchy/bin/omarchy-hyprland-focus-app foot || true
+fi

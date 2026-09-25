@@ -138,6 +138,17 @@ in
     # AC power stay-awake watcher: flips Omarchy's idle stay-awake flag while
     # plugged in (config/bin/ac-stay-awake + ac-stay-awake.service below).
     ".local/bin/ac-stay-awake".source = link "bin/ac-stay-awake";
+    # Click-to-jump for opencode attention toasts (opencode-notify above):
+    # switches the attached tmux client to the toast's window and raises the
+    # foot window showing that client. Invoked detached by Omarchy's
+    # notification daemon, exec'd from the toast's omarchy-exec hint.
+    ".local/bin/omarchy-notification-jump".source = link "bin/omarchy-notification-jump";
+    # Permission-toast responder: the accept/reject menu behind permission
+    # toasts (opencode-notify bakes it as the toast's click command). Accept
+    # POSTs {"response":"once"} and Reject {"response":"reject"} to the
+    # opencode server the plugin hands over on the exec command line; Jump
+    # falls through to omarchy-notification-jump.
+    ".local/bin/omarchy-permission-menu".source = link "bin/omarchy-permission-menu";
     # OpenCode Go usage for the omarchy.agents bar panel: the collector writes
     # ~/.local/state/omarchy/agents/usage/opencode.json (the panel discovers
     # it on its own), refreshed by the declarative user timer. No packaged
@@ -155,6 +166,13 @@ in
       source = link "opencode/tui.json";
       force = true;
     };
+    # opencode toast plugin: desktop attention notifications through Omarchy's
+    # notification daemon (permission asks, questions, errors, idle). Each
+    # toast bakes an omarchy-exec click command -> omarchy-notification-jump
+    # (below), so clicking a toast opens that session's tmux window. Global
+    # plugins auto-discover from ~/.config/opencode/plugins/ - restart
+    # opencode to pick up edits.
+    ".config/opencode/plugins/omarchy-notify.ts".source = link "opencode/plugins/omarchy-notify.ts";
     # pi coding agent: Zen's free-model gateway 429s every request that does
     # not carry the official-client header fingerprint (FreeUsageLimitError),
     # so the provider override injects them. Only this file is linked -

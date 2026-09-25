@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# omarchy:summary=Respond to an opencode permission request from its toast
+# omarchy:args=[--server <url>] [--directory <dir>] [--session <id>] \
+#   [--permission <id>] [--socket <path>] [--pane <id>] -- <prompt>
+# Click handler for opencode permission toasts. Omarchy popups carry only one
+# click action (no inline buttons), so the click summons Omarchy's option
+# menu instead: Accept replies "once" to the opencode server, Reject replies
+# "reject", Jump summarizes to the notifying tmux window. Every other exit
+# (dismiss, timeout, menu cancelled) is a no-op - deciding stays on the user.
+
+set -euo pipefail
+
+server=""
+directory=""
+session=""
+permission=""
+socket=""
+pane=""
+prompt="Permission request"
+
+while (($#)); do
+  case $1 in
+  --server) [[ ${2-} ]] || break; server=$2; shift 2 ;;
+  --directory) [[ ${2-} ]] || break; directory=$2; shift 2 ;;
+  --session) [[ ${2-} ]] || break; session=$2; shift 2 ;;
+  --permission) [[ ${2-} ]] || break; permission=$2; shift 2 ;;
+  --socket) [[ ${2-} ]] || break; socket=$2; shift 2 ;;
+  --pane) [[ ${2-} ]] || break; pane=$2; shift 2 ;;
+  --) shift; [[ ${1-} ]] && prompt=$1; break ;;
+  *) shift ;;
+  esac
+done
+
+jump=$HOME/.local/bin/omarchy-notification-jump
+OM=/usr/share/omarchy/bin
+
+urlencode() {
+  local v=${1//&/%26}
+  v=${v// /%20}
+  printf '%s' "$v"
+}
+
+
+reply() {
+  local response=$1
+  local query=""
+  if [[ "$directory" != "" ]]; then
+    query="?directory=$(urlencode "$directory")"
+  fi
+  # The opencode server is loopback-only; its DELETE/POST surface would be
+  # confused by -X leftovers, so keep curl silent + fail-checked.
+  curl -fsS --max-time 5 -o /dev/null \
+    -X POST "${server%/}/session/${session}/permissions/${permission}${query}" \
+    -H 'Content-Type: application/json' \
+    -d "{\"response\":\"${response}\"}" || {
+    "$OM/omarchy-notification-send" -u normal -t 5000 "Permission not applied" \
+      "opencode server unreachable - answer in the session window" || true
+    return 1
+  }
+}
+
+choice=$("$OM/omarchy-menu-select" "$prompt" "Accept" "Reject" "Jump to window") || exit 0
+case $choice in
+"Accept"*)
+  if reply once; then
+    "$OM/omarchy-notification-send" -u low -t 3000 "Permission accepted" "agent resumed" || true
+  fi
+  ;;
+"Reject"*)
+  if reply reject; then
+    "$OM/omarchy-notification-send" -u low -t 3000 "Permission rejected" "the agent was told no" || true
+  fi
+  ;;
+"Jump to window"*)
+  args=()
+  [[ -n "$socket" ]] && args+=(--socket "$socket")
+  [[ -n "$pane" ]] && args+=(--pane "$pane")
+  "$jump" "${args[@]}"
+  ;;
+esac
