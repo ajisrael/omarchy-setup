@@ -137,6 +137,20 @@ HM stays user-scope only and must not expand into desktop-config territory:
   check `hyprctl configerrors` yourself.
 - Do NOT add HM modules that generate hyprland-style desktop config; track
   plain override files under `config/hypr/` instead.
+- `config/hypr/input.lua` deliberately blanks `input.kb_options` to undo
+  Omarchy's `compose:caps,shift:both_capslock_cancel` default (Caps Lock as
+  the Compose macro key, real Caps Lock moved to both-Shifts). Consequences to
+  remember: the `~/.XCompose` sequences (`Caps+m s` emoji, `Caps+space n`
+  identity) become unreachable, and `omarchy-fcitx5.service` is now pointless
+  (safe to leave enabled - it just never fires). Gotcha when debugging:
+  `input.kb_options` is applied per-keyboard at keyboard-init time and is NOT
+  retro-fitted to virtual keyboards that already exist, so after any change
+  `hyprctl devices` still shows the OLD options on
+  `hl-virtual-keyboard-waynergy` until that service restarts. Since waynergy
+  injects ALL Mac-keyboard input through its virtual keyboard, a kb_options
+  change is only really live for the Mac once `waynergy.service` has restarted.
+  Verify per-keyboard with
+  `hyprctl -j devices | jq -r '.keyboards[] | "\(.name) \(.options)"'`.
 
 ## Radio recovery scripts (maint/)
 

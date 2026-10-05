@@ -37,6 +37,16 @@ in
   programs.ssh = {
     enable = true;
     enableDefaultConfig = false;
+    # Lab host entries live in the code-control repo (~/code/code-control),
+    # not here - this repo is tracked for a personal box with no Proxmox lab, and
+    # code-control must stay agnostic of omarchy-setup. The dependency is
+    # deliberately one-way: omarchy-setup knows the path, the repo does not.
+    #
+    # This MUST live here rather than as an `Include` line appended to
+    # ~/.ssh/config: programs.ssh owns that file with force = true, so a manual
+    # edit is erased on the next ./rebuild.sh. `includes` is rendered by HM at
+    # the top of the generated file, ahead of the "Host *" block below.
+    includes = [ "~/code/code-control/ssh/config" ];
     settings = {
       "*" = {
         ForwardAgent = false;

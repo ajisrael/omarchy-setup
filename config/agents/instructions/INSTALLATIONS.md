@@ -21,6 +21,17 @@ globally, use this priority order:
    it fails with "sudo: a terminal is required to read the password". Route
    global installs through the user or their omarchy setup agent instead of
    attempting them from an agent shell.
+
+   Note: a 404 (or a bogus "Exceeded the maximum allowed file size") from
+   `stable-mirror.omarchy.org` during an install is a STALE SYNC DB, not a
+   broken mirror. The mirror prunes superseded package files, so any package
+   whose version moved since the last update 404s while its neighbours
+   download fine.    `omarchy pkg add` cannot fix it - run `omarchy update`
+   first, then retry. Diagnose by comparing the local version
+   (`pacman -Si <pkg>`) against the live db (bsdtar needs a seekable
+   file, so fetch then list):
+   `curl -so /tmp/extra.db .../extra/os/x86_64/extra.db &&
+    bsdtar -tf /tmp/extra.db | grep -E '^<pkg>-[0-9]'`
 2. **AUR directly via `yay <name>`** - second choice, for packages with no
    Arch repo package. `omarchy pkg add` cannot reach the AUR, so use `yay`
    directly (e.g. blesh-git, waynergy). Still system layer.
