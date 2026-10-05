@@ -8,6 +8,7 @@ selected=$(
 	{
 		find ~/data-annotation/ ~/learning/ ~/code/ -mindepth 1 -maxdepth 1 -type d
 		printf '%s\n' ~/omarchy-setup
+		printf '%s\n' ~/firstmate
 	} | fzf
 )
 
